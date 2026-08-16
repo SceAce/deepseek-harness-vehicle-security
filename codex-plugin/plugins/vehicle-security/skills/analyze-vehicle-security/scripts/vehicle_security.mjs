@@ -18,8 +18,19 @@ function has(name) {
 }
 
 function usage() {
-  console.error('usage: vehicle_security.mjs audit | uds-decode | can-summary --path PATH | artifact-triage --path PATH')
+  console.error('usage: vehicle_security.mjs audit | uds-decode | can-summary --path PATH | artifact-triage --path PATH | program-analyze --path PATH')
   process.exitCode = 2
+}
+
+const workspaceRoot = process.env.VEHICLE_WORKSPACE_ROOT ?? process.cwd()
+
+async function workspaceFile(filePath) {
+  const { resolveWorkspaceFile } = await runtime('paths')
+  return resolveWorkspaceFile(
+    workspaceRoot,
+    path.relative(workspaceRoot, path.resolve(filePath)),
+    256 * 1024 * 1024,
+  )
 }
 
 try {
@@ -35,21 +46,34 @@ try {
     const filePath = option('--path')
     if (!filePath) throw new Error('--path is required')
     const { parseCanLog } = await runtime('can')
-    const text = await readFile(path.resolve(filePath), 'utf8')
+    const file = await workspaceFile(filePath)
+    const text = await readFile(file.path, 'utf8')
     const maxFrames = option('--max-frames')
-    console.log(JSON.stringify(parseCanLog(text, {
+    console.log(JSON.stringify({ path: file.relativePath, ...parseCanLog(text, {
       idFilter: option('--id-filter'),
       maxFrames: maxFrames === undefined ? undefined : Number(maxFrames),
-    }), null, 2))
+    }) }, null, 2))
   } else if (command === 'artifact-triage') {
     const filePath = option('--path')
     if (!filePath) throw new Error('--path is required')
     const { triageArtifact } = await runtime('artifact')
-    const { resolveWorkspaceFile } = await runtime('paths')
-    const workspaceRoot = process.env.VEHICLE_WORKSPACE_ROOT ?? process.cwd()
-    const file = await resolveWorkspaceFile(workspaceRoot, path.relative(workspaceRoot, path.resolve(filePath)), 256 * 1024 * 1024)
+    const file = await workspaceFile(filePath)
     console.log(JSON.stringify(await triageArtifact(file, {
       enableBinwalk: !has('--no-binwalk'),
+      timeoutMs: 20_000,
+      maxOutputChars: 40_000,
+    }), null, 2))
+  } else if (command === 'program-analyze') {
+    const filePath = option('--path')
+    if (!filePath) throw new Error('--path is required')
+    const { analyzeProgram } = await runtime('program')
+    const file = await workspaceFile(filePath)
+    const maxStrings = option('--max-strings')
+    const minStringLength = option('--min-string-length')
+    console.log(JSON.stringify(await analyzeProgram(file, {
+      focus: option('--focus'),
+      maxStrings: maxStrings === undefined ? undefined : Number(maxStrings),
+      minStringLength: minStringLength === undefined ? undefined : Number(minStringLength),
       timeoutMs: 20_000,
       maxOutputChars: 40_000,
     }), null, 2))

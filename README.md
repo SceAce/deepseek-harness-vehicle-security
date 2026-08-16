@@ -7,6 +7,7 @@
 | `vehicle_tool_audit` | 检查 CAN、固件、逆向、Android、RF 工具的路径和版本 |
 | `vehicle_can_log_summary` | 解析 candump 和 Vector ASC 日志，统计 CAN ID、通道与时间范围 |
 | `vehicle_uds_decode` | 解码 UDS 请求、正响应、负响应和常见 ISO-TP 前缀 |
+| `vehicle_program_analyze` | 提取程序架构、ELF 保护、导入和高价值字符串，生成证据、假设与工具验证步骤 |
 | `vehicle_artifact_triage` | 计算固件哈希、采样熵、文件类型并执行只读 Binwalk 签名扫描 |
 
 ## 设计边界
@@ -25,7 +26,7 @@
 ## 本地测试
 
 ```bash
-cd /home/source/Tmp/deepseek-harness-vehicle-security
+cd /path/to/deepseek-harness-vehicle-security
 pnpm install
 pnpm test
 pnpm run check
@@ -38,7 +39,7 @@ pnpm run check
 当前 Harness 使用 `next` 发布标签。把本目录作为本地组合包链接到内置 `web` profile：
 
 ```bash
-cd /home/source/Tmp/deepseek-harness-vehicle-security
+cd /path/to/deepseek-harness-vehicle-security
 npx @deepseek-ai/dsh@next plugin --profile web add .
 npx @deepseek-ai/dsh@next web --dump-config
 ```
@@ -78,6 +79,7 @@ Web UI 默认地址是 `http://127.0.0.1:3080`。
 使用 vehicle_tool_audit 检查当前车联网工具环境。
 分析 logs/drive.asc，只统计 0x7E0 和 0x7E8。
 解码 UDS 报文 03 22 F1 90。
+分析 bin/gateway，围绕诊断鉴权建立假设，并给出 IDA/r2/GDB 验证步骤。
 对 firmware/gateway.bin 做只读固件初检。
 ```
 
@@ -96,6 +98,7 @@ SKILL_DIR="$PWD/codex-plugin/plugins/vehicle-security/skills/analyze-vehicle-sec
 node "$SKILL_DIR/scripts/vehicle_security.mjs" audit
 node "$SKILL_DIR/scripts/vehicle_security.mjs" uds-decode --payload '03 22 F1 90'
 node "$SKILL_DIR/scripts/vehicle_security.mjs" can-summary --path fixtures/candump.log
+node "$SKILL_DIR/scripts/vehicle_security.mjs" program-analyze --path bin/gateway --focus 'diagnostic authentication'
 node "$SKILL_DIR/scripts/vehicle_security.mjs" artifact-triage --path firmware/gateway.bin
 ```
 

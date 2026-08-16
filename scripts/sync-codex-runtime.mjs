@@ -7,7 +7,7 @@ const runtime = path.join(
   root,
   'codex-plugin/plugins/vehicle-security/skills/analyze-vehicle-security/runtime',
 )
-const modules = ['artifact', 'audit', 'can', 'paths', 'process', 'uds']
+const modules = ['artifact', 'audit', 'can', 'paths', 'process', 'program', 'uds']
 
 await rm(runtime, { recursive: true, force: true })
 await mkdir(runtime, { recursive: true })

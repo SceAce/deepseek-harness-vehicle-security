@@ -1,19 +1,25 @@
 {
   "name": "vehicle-security",
-  "version": "0.1.0",
-  "description": "Read-only CAN, UDS, firmware, and vehicle-security analysis for Codex",
+  "version": "0.1.0+codex.20260816061005",
+  "description": "Evidence-driven program, CAN, UDS, firmware, and vehicle-security analysis for Codex",
   "author": {
     "name": "SceAce"
   },
   "skills": "./skills/",
   "interface": {
     "displayName": "Vehicle Security Analysis",
-    "shortDescription": "Analyze CAN, UDS, firmware, and local tooling",
-    "longDescription": "Deterministic, read-only helpers for vehicle-security competition artifacts, CAN logs, UDS payloads, and local reverse-engineering tool inventory.",
+    "shortDescription": "Validate program, CAN, UDS, and firmware conclusions",
+    "longDescription": "Deterministic vehicle-security collection plus evidence-linked hypotheses and validation plans for executable, firmware, CAN, and UDS analysis.",
     "developerName": "SceAce",
     "category": "Developer Tools",
-    "capabilities": ["CAN log summaries", "UDS decoding", "firmware triage", "tool audits"],
-    "defaultPrompt": "Use $analyze-vehicle-security to inspect the supplied vehicle-security artifacts and report observations with reproducible commands."
+    "capabilities": [
+      "Evidence-backed program analysis",
+      "CAN log summaries",
+      "UDS decoding",
+      "firmware triage",
+      "tool audits"
+    ],
+    "defaultPrompt": "Use $analyze-vehicle-security to analyze this program, validate its highest-value hypothesis, and report evidence-bounded conclusions."
   },
   "repository": "https://github.com/SceAce/deepseek-harness-vehicle-security",
   "keywords": [

@@ -1,4 +1,4 @@
 interface:
-  display_name: "Vehicle Security Analysis"
-  short_description: "Analyze CAN, UDS, firmware, and local tooling"
-  default_prompt: "Use $analyze-vehicle-security to triage this vehicle-security artifact."
+  display_name: "Vehicle Security Evidence Analysis"
+  short_description: "Validate vehicle program and protocol conclusions"
+  default_prompt: "Use $analyze-vehicle-security to analyze this program, test its top hypothesis, and report evidence-bounded conclusions."

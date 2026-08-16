@@ -1,7 +1,7 @@
 {
   "name": "dsh-vehicle-security",
   "version": "0.1.0",
-  "description": "Vehicle security analysis tools for DeepSeek Harness",
+  "description": "Evidence-driven vehicle program and protocol analysis tools for DeepSeek Harness",
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
@@ -51,6 +51,8 @@
     "deepseek-harness",
     "dsh-plugin",
     "vehicle-security",
+    "program-analysis",
+    "reverse-engineering",
     "can-bus",
     "uds",
     "firmware"

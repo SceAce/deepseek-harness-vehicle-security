@@ -15,7 +15,7 @@ const config = {
   enableBinwalk: false,
 }
 
-test('exports a namespace plugin and registers four tools', () => {
+test('exports a namespace plugin and registers five tools', () => {
   const registered = []
   apply({ tools: { register: tool => registered.push(tool) } }, config)
   assert.equal(name, 'vehicle-security')
@@ -24,6 +24,7 @@ test('exports a namespace plugin and registers four tools', () => {
     'vehicle_tool_audit',
     'vehicle_can_log_summary',
     'vehicle_uds_decode',
+    'vehicle_program_analyze',
     'vehicle_artifact_triage',
   ])
 })
@@ -49,6 +50,7 @@ test('mounts on real Cordis services and cleans up registrations', async () => {
     'vehicle_tool_audit',
     'vehicle_can_log_summary',
     'vehicle_uds_decode',
+    'vehicle_program_analyze',
     'vehicle_artifact_triage',
   ])
   await fiber.dispose()

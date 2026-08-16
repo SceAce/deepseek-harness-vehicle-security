@@ -1,37 +1,39 @@
 ---
 name: analyze-vehicle-security
-description: Analyze local vehicle-security artifacts with deterministic helpers. Use for CAN candump or Vector ASC logs, UDS/ISO-TP payloads, firmware and binary triage, and auditing installed automotive and reverse-engineering tools.
+description: Analyze vehicle-security programs and artifacts with an evidence-driven workflow. Use for native executables, ECU or gateway binaries, firmware, Android components, CAN candump or Vector ASC logs, UDS/ISO-TP payloads, tool audits, reverse-engineering hypotheses, and validation with IDA Pro, radare2, GDB/Pwndbg, traces, or captures.
 ---
 
 # Analyze Vehicle Security
 
-Use the bundled CLI for repeatable, read-only analysis. It runs against the current workspace and emits JSON suitable for further reasoning.
+Build conclusions from reproducible evidence. Use the bundled CLI for deterministic collection, then use specialist tools to test the resulting hypotheses.
 
-## Quick Start
+## Core Loop
 
-Set `SKILL_DIR` to this skill directory, then run:
+1. Define one concrete question, such as "where is UDS SecurityAccess authorized?" or "can a network field reach command execution?"
+2. Preserve and hash the artifact. Run the narrowest deterministic command.
+3. Separate records into `E-*` observations, `C-*` bounded conclusions, `H-*` hypotheses, and `V-*` validation steps.
+4. Trace inputs through parsing, state changes, authorization checks, dangerous sinks, and outputs. Record addresses and function names.
+5. Execute the corresponding `V-*` step with IDA Pro MCP, radare2, GDB/Pwndbg, syscall traces, or a saved bus/network capture.
+6. Promote a hypothesis only when the success criteria are met. Otherwise retain it as a lead or record the counterevidence that rules it out.
+
+Never equate an imported function, string, missing hardening flag, or decompiler guess with a vulnerability. A useful conclusion states the affected component, input, reachable path, observed behavior, conditions, evidence IDs, confidence, and remaining boundary.
+
+For executables and libraries, read [references/program-analysis.md](references/program-analysis.md) before choosing deeper tools. For CAN/UDS, firmware, Android, and hardware captures, read [references/workflows.md](references/workflows.md).
+
+## Deterministic Commands
 
 ```bash
 node "$SKILL_DIR/scripts/vehicle_security.mjs" audit
+node "$SKILL_DIR/scripts/vehicle_security.mjs" program-analyze --path bin/gateway --focus 'diagnostic authentication'
 node "$SKILL_DIR/scripts/vehicle_security.mjs" uds-decode --payload '03 22 F1 90'
-node "$SKILL_DIR/scripts/vehicle_security.mjs" can-summary --path fixtures/candump.log
+node "$SKILL_DIR/scripts/vehicle_security.mjs" can-summary --path logs/drive.asc --id-filter 0x7E0,0x7E8
 node "$SKILL_DIR/scripts/vehicle_security.mjs" artifact-triage --path firmware/gateway.bin
 ```
 
-## Workflow
+- `program-analyze --path PATH [--focus TEXT] [--max-strings N]`: collect program identity, ELF metadata and hardening, imports, tagged strings, bounded conclusions, hypotheses, and validation plans.
+- `audit`: inventory CAN, firmware, reverse-engineering, Android, RF, and debugging tools.
+- `uds-decode --payload PAYLOAD [--no-isotp]`: decode one UDS request or response.
+- `can-summary --path PATH [--id-filter IDS] [--max-frames N]`: summarize saved candump or ASC traffic.
+- `artifact-triage --path PATH [--no-binwalk]`: collect size, SHA-256, entropy, file type, and optional Binwalk signatures.
 
-1. Preserve the original artifact and establish its workspace-relative path.
-2. Run the narrowest deterministic command first: `audit`, `uds-decode`, `can-summary`, or `artifact-triage`.
-3. Report raw observations separately from interpretation. Include paths, IDs, timestamps, hashes, and tool versions.
-4. Use [references/workflows.md](references/workflows.md) for follow-up CAN/UDS, firmware, Android, and hardware-dependent analysis.
-
-The helpers reject missing files, oversized files, and symlink paths that escape the workspace. Firmware triage computes metadata and performs an optional read-only signature scan; it does not execute or modify samples. Do not transmit live CAN frames from this skill.
-
-## Command Options
-
-- `audit`: inspect common CAN, firmware, reverse-engineering, Android, RF, and debugging executables, including Pwndbg through GDB.
-- `uds-decode --payload PAYLOAD [--no-isotp]`: decode UDS requests, positive responses, negative response codes, and common ISO-TP prefixes.
-- `can-summary --path PATH [--id-filter IDS] [--max-frames N]`: parse candump or Vector ASC logs and summarize IDs, channels, counts, and timestamps.
-- `artifact-triage --path PATH [--no-binwalk]`: return size, SHA-256, sampled entropy, `file` output, and optional Binwalk output.
-
-When a command fails, preserve the error and inspect the input path or payload before retrying. Keep generated reports alongside the case artifacts.
+Keep all input paths inside `VEHICLE_WORKSPACE_ROOT` or the current workspace. Preserve raw tool output alongside the final report so another analyst can reproduce every promoted conclusion.

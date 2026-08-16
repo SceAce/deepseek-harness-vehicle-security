@@ -6,7 +6,7 @@ Start with `can-summary` to identify active IDs, channels, and time ranges. Filt
 
 ## Firmware and binary artifacts
 
-Run `artifact-triage` before disassembly. Record the SHA-256, size, file type, and entropy. Keep a copy of the original and use IDA Pro, GDB/Pwndbg, or other installed tools on a derived working copy. The helper's Binwalk mode is a signature scan and does not extract or execute content.
+Run `artifact-triage` before extraction and `program-analyze` on identified executables. Record the SHA-256, size, file type, entropy, evidence IDs, hypotheses, and validation steps. Keep a copy of the original and use IDA Pro, radare2, GDB/Pwndbg, or other installed tools on a derived working copy. Correlate firmware services, init scripts, configuration, protocol handlers, and update logic rather than analyzing each binary in isolation. The helper's Binwalk mode is a signature scan and does not extract or execute content.
 
 ## Android and gateway applications
 

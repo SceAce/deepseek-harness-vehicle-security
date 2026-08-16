@@ -6,6 +6,7 @@ import { auditTools } from './audit.js'
 import { triageArtifact } from './artifact.js'
 import { parseCanLog } from './can.js'
 import { resolveWorkspaceFile } from './paths.js'
+import { analyzeProgram } from './program.js'
 import { decodeUds } from './uds.js'
 
 export const name = 'vehicle-security'
@@ -81,6 +82,30 @@ export function apply(ctx: Context, config: Config): void {
     isConcurrencySafe: () => true,
     async execute(args) {
       return decodeUds(args.payload, args.stripIsoTp ?? true) as unknown as JsonValue
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'vehicle_program_analyze',
+    description: 'Build an evidence-backed program analysis: identity, ELF hardening, imports, relevant strings, bounded conclusions, hypotheses, and tool validation steps.',
+    parameters: {
+      path: { type: 'string', required: true, description: 'Program path relative to workspaceRoot' },
+      focus: { type: 'string', description: 'Optional analysis objective, for example diagnostic authentication or CAN message parsing' },
+      maxStrings: { type: 'integer', description: 'Maximum tagged strings to return, from 1 to 500' },
+      minStringLength: { type: 'integer', description: 'Minimum printable string length, from 4 to 64' },
+    },
+    output: jsonOutput,
+    timeoutMs: config.commandTimeoutMs * 2,
+    isConcurrencySafe: () => true,
+    async execute(args, exec) {
+      const file = await resolveWorkspaceFile(config.workspaceRoot, args.path, config.maxFileBytes)
+      return analyzeProgram(file, {
+        ...commandOptions,
+        signal: exec.signal,
+        focus: args.focus,
+        maxStrings: args.maxStrings,
+        minStringLength: args.minStringLength,
+      }) as unknown as Promise<JsonValue>
     },
   }))
 
