@@ -11,7 +11,7 @@ Turn an underspecified input into a small number of testable questions, collect 
 
 1. Restate the objective as one decision or question. Record known constraints and what success looks like.
 2. Inventory attachments, paths, endpoints, captures, credentials, hardware, observed behavior, and existing notes. Treat absent evidence as a gap, not a negative result.
-3. Call the `vehicle_investigation_plan` MCP tool. For file inputs, pass the current workspace root and a relative path. If the MCP is unavailable, run:
+3. Call the `vehicle_investigation_plan` tool. For file inputs, use a path relative to the active workspace. If the tool is unavailable, run:
 
 ```bash
 node "$SKILL_DIR/../analyze-vehicle-security/scripts/vehicle_security.mjs" investigate --objective 'QUESTION' --path 'RELATIVE_PATH'
@@ -42,7 +42,7 @@ For each iteration:
 
 ## Tool Strategy
 
-Use the plugin MCP for deterministic intake, hashing, CAN summaries, UDS decoding, program analysis, firmware triage, and tool inventory. Use the sibling `$analyze-vehicle-security` skill for exact CLI commands and detailed program-analysis rules.
+Use the plugin's `vehicle_*` tools for deterministic intake, hashing, CAN summaries, UDS decoding, program analysis, firmware triage, and tool inventory. Use the sibling `$analyze-vehicle-security` skill for exact CLI commands and detailed program-analysis rules.
 
 Use specialist tools only after defining the expected signal:
 

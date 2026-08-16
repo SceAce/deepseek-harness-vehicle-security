@@ -9,10 +9,19 @@
     ".": {
       "types": "./lib/index.d.ts",
       "default": "./lib/index.js"
+    },
+    "./tools": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./skills": {
+      "types": "./lib/skills.d.ts",
+      "default": "./lib/skills.js"
     }
   },
   "files": [
     "lib",
+    "codex-plugin/plugins/vehicle-security",
     "cordis.patch.yml",
     "README.md",
     "LICENSE"
@@ -35,10 +44,14 @@
     "@deepseek-ai/schemastery": "^3.18.1"
   },
   "peerDependencies": {
+    "@deepseek-ai/dsh-skill": ">=0.1.0-rc.6 <0.2.0",
+    "@deepseek-ai/dsh-skill-filesystem": ">=0.1.0-rc.6 <0.2.0",
     "@deepseek-ai/dsh-tools": ">=0.1.0-rc.6 <0.2.0"
   },
   "devDependencies": {
     "@deepseek-ai/dsh-tools": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-skill": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-skill-filesystem": "^0.1.0-rc.6",
     "@deepseek-ai/cordis": "^4.0.1",
     "@deepseek-ai/dsh-system-prompt": "^0.1.0-rc.6",
     "@types/node": "^24.0.0",

@@ -1,9 +1,9 @@
 import type { Context } from '@deepseek-ai/cordis';
 import Schema from '@deepseek-ai/schemastery';
-export declare const name = "vehicle-security";
+export declare const name = "vehicle-security-tools";
 export declare const inject: string[];
 export interface Config {
-    workspaceRoot: string;
+    workspaceRoot?: string;
     maxFileBytes: number;
     maxOutputChars: number;
     commandTimeoutMs: number;

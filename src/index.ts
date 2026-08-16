@@ -10,11 +10,11 @@ import { resolveWorkspaceFile } from './paths.js'
 import { analyzeProgram } from './program.js'
 import { decodeUds } from './uds.js'
 
-export const name = 'vehicle-security'
+export const name = 'vehicle-security-tools'
 export const inject = ['tools']
 
 export interface Config {
-  workspaceRoot: string
+  workspaceRoot?: string
   maxFileBytes: number
   maxOutputChars: number
   commandTimeoutMs: number
@@ -22,7 +22,7 @@ export interface Config {
 }
 
 export const Config: Schema<Config> = Schema.object({
-  workspaceRoot: Schema.string().default('.'),
+  workspaceRoot: Schema.string(),
   maxFileBytes: Schema.number().default(256 * 1024 * 1024),
   maxOutputChars: Schema.number().default(40_000),
   commandTimeoutMs: Schema.number().default(20_000),
@@ -58,7 +58,7 @@ export function apply(ctx: Context, config: Config): void {
     async execute(args, exec) {
       const inputKind = parseInputKind(args.inputKind)
       const file = args.path
-        ? await resolveWorkspaceFile(config.workspaceRoot, args.path, config.maxFileBytes)
+        ? await resolveWorkspaceFile(executionWorkspace(config, exec), args.path, config.maxFileBytes)
         : null
       return planInvestigation({ objective: args.objective, inputKind, context: args.context }, file, {
         ...commandOptions,
@@ -90,8 +90,8 @@ export function apply(ctx: Context, config: Config): void {
     },
     output: jsonOutput,
     isConcurrencySafe: () => true,
-    async execute(args) {
-      const file = await resolveWorkspaceFile(config.workspaceRoot, args.path, config.maxFileBytes)
+    async execute(args, exec) {
+      const file = await resolveWorkspaceFile(executionWorkspace(config, exec), args.path, config.maxFileBytes)
       const text = await readFile(file.path, 'utf8')
       return { path: file.relativePath, ...parseCanLog(text, args) }
     },
@@ -124,7 +124,7 @@ export function apply(ctx: Context, config: Config): void {
     timeoutMs: config.commandTimeoutMs * 2,
     isConcurrencySafe: () => true,
     async execute(args, exec) {
-      const file = await resolveWorkspaceFile(config.workspaceRoot, args.path, config.maxFileBytes)
+      const file = await resolveWorkspaceFile(executionWorkspace(config, exec), args.path, config.maxFileBytes)
       return analyzeProgram(file, {
         ...commandOptions,
         signal: exec.signal,
@@ -146,7 +146,7 @@ export function apply(ctx: Context, config: Config): void {
     timeoutMs: config.commandTimeoutMs,
     isConcurrencySafe: () => true,
     async execute(args, exec) {
-      const file = await resolveWorkspaceFile(config.workspaceRoot, args.path, config.maxFileBytes)
+      const file = await resolveWorkspaceFile(executionWorkspace(config, exec), args.path, config.maxFileBytes)
       return triageArtifact(file, {
         ...commandOptions,
         signal: exec.signal,
@@ -154,6 +154,15 @@ export function apply(ctx: Context, config: Config): void {
       }) as unknown as Promise<JsonValue>
     },
   }))
+}
+
+function executionWorkspace(config: Config, exec: { agent?: { session: { header: { cwd?: string } } } }): string {
+  const configured = config.workspaceRoot?.trim()
+  if (configured) return configured
+
+  const sessionCwd = exec.agent?.session.header.cwd
+  if (sessionCwd) return sessionCwd
+  throw new Error('session workspace is unavailable; configure workspaceRoot explicitly')
 }
 
 function parseInputKind(value: string | undefined): 'artifact' | 'prompt' | 'lab' | undefined {

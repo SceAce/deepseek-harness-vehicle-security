@@ -1,6 +1,6 @@
 # DeepSeek Harness 车联网安全插件
 
-面向车联网比赛和本地样本分析的 DeepSeek Harness + Codex 组合包。当前版本提供一个正式调查流程和六个确定性工具：
+面向车联网比赛和本地样本分析的 DeepSeek Harness + Codex 组合包。Harness 侧按官方插件架构组合一个工具插件和一个 Skill Provider 插件，当前版本提供一个正式调查流程和六个确定性工具：
 
 | 工具 | 用途 |
 | --- | --- |
@@ -24,11 +24,17 @@
 
 流程统一使用 `E-*` 观察、`C-*` 有边界结论、`H-*` 假设、`V-*` 验证动作和 `F-*` 已确认发现。每轮优先执行信息增益最高且成本最低的验证动作，并保存原始输出和反证。
 
-Codex 中使用 `$investigate-vehicle-security` 作为总入口，使用 `$analyze-vehicle-security` 执行确定性采集和深入程序分析。详细规则随 Skill 分层加载，不会一次占满模型上下文。
+DeepSeek Harness 和 Codex 中都使用 `$investigate-vehicle-security` 作为总入口，使用 `$analyze-vehicle-security` 执行确定性采集和深入程序分析。详细规则由各自的 Skill 发现机制按需加载，不会一次占满模型上下文。
+
+```text
+dsh-vehicle-security bundle
+├── dsh-vehicle-security/tools   -> 注册六个 vehicle_* 工具
+└── dsh-vehicle-security/skills  -> 通过 ctx.skills.registerProvider() 提供两个 Skill
+```
 
 ## 设计边界
 
-- 文件路径限定在 `workspaceRoot` 内，并通过真实路径检查符号链接越界。
+- 文件路径默认限定在当前 `session.header.cwd` 内，并通过真实路径检查符号链接越界；也可显式配置固定 `workspaceRoot`。
 - 外部程序使用固定可执行文件和参数数组调用，不拼接 shell 命令。
 - 固件初检只扫描，不执行 Binwalk 解包，也不修改样本。
 - 文件大小、命令超时和输出长度均可配置。
@@ -60,7 +66,7 @@ npx @deepseek-ai/dsh@next plugin --profile web add .
 npx @deepseek-ai/dsh@next web --dump-config
 ```
 
-从待分析项目目录启动，使默认的 `workspaceRoot: '.'` 指向该项目：
+从待分析项目目录启动。文件类工具会使用新会话记录的绝对工作目录，与启动 DSH 服务时所在目录无关：
 
 ```bash
 cd /path/to/competition-case
@@ -75,17 +81,18 @@ Web UI 默认地址是 `http://127.0.0.1:3080`。
 
 ```yaml
 - insert:
-    - id: vehicle-security
-      name: dsh-vehicle-security
+    - id: vehicle-security-tools
+      name: dsh-vehicle-security/tools
       config:
-        workspaceRoot: '.'
         maxFileBytes: 268435456
         maxOutputChars: 40000
         commandTimeoutMs: 20000
         enableBinwalk: true
+    - id: vehicle-security-skills
+      name: dsh-vehicle-security/skills
 ```
 
-比赛固件超过 256 MiB 时提高 `maxFileBytes`。禁用 `enableBinwalk` 后，初检仍会返回大小、SHA-256、采样熵和 `file` 类型。
+比赛固件超过 256 MiB 时提高 `maxFileBytes`。只有需要将所有会话锁定到同一目录时才配置 `workspaceRoot`；默认的会话工作区更适合 Web UI 同时分析多个项目。禁用 `enableBinwalk` 后，初检仍会返回大小、SHA-256、采样熵和 `file` 类型。
 
 ## 调用示例
 

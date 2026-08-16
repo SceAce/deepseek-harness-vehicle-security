@@ -1,9 +1,10 @@
 - insert:
-    - id: vehicle-security
-      name: dsh-vehicle-security
+    - id: vehicle-security-tools
+      name: dsh-vehicle-security/tools
       config:
-        workspaceRoot: '.'
         maxFileBytes: 268435456
         maxOutputChars: 40000
         commandTimeoutMs: 20000
         enableBinwalk: true
+    - id: vehicle-security-skills
+      name: dsh-vehicle-security/skills
