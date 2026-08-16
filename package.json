@@ -1,7 +1,7 @@
 {
   "name": "dsh-vehicle-security",
-  "version": "0.1.0",
-  "description": "Evidence-driven vehicle program and protocol analysis tools for DeepSeek Harness",
+  "version": "0.2.0",
+  "description": "Evidence-driven vehicle-security investigation, program, and protocol tools for DeepSeek Harness",
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
@@ -22,7 +22,7 @@
     "build:codex": "node scripts/sync-codex-runtime.mjs",
     "build": "pnpm run build:harness && pnpm run build:codex",
     "test": "pnpm run build && node --test",
-    "check": "tsc -p tsconfig.json --noEmit && node --check scripts/sync-codex-runtime.mjs && node --check codex-plugin/plugins/vehicle-security/skills/analyze-vehicle-security/scripts/vehicle_security.mjs",
+    "check": "tsc -p tsconfig.json --noEmit && node --check scripts/sync-codex-runtime.mjs && node --check codex-plugin/plugins/vehicle-security/skills/analyze-vehicle-security/scripts/vehicle_security.mjs && node --check codex-plugin/plugins/vehicle-security/mcp/server.mjs",
     "prepare": "pnpm run build",
     "prepack": "pnpm run build"
   },

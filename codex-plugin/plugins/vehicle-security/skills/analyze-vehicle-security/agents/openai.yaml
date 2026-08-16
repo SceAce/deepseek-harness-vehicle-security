@@ -2,3 +2,10 @@ interface:
   display_name: "Vehicle Security Evidence Analysis"
   short_description: "Validate vehicle program and protocol conclusions"
   default_prompt: "Use $analyze-vehicle-security to analyze this program, test its top hypothesis, and report evidence-bounded conclusions."
+
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "vehicle-security"
+      description: "Portable deterministic vehicle-security analysis tools"
+      transport: "stdio"

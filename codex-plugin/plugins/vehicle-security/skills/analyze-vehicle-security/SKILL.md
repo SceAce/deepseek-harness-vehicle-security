@@ -7,6 +7,8 @@ description: Analyze vehicle-security programs and artifacts with an evidence-dr
 
 Build conclusions from reproducible evidence. Use the bundled CLI for deterministic collection, then use specialist tools to test the resulting hypotheses.
 
+For an attachment, short prompt, lab target, directory, or mixed vehicle attack chain that still needs routing, use the sibling `$investigate-vehicle-security` skill first.
+
 ## Core Loop
 
 1. Define one concrete question, such as "where is UDS SecurityAccess authorized?" or "can a network field reach command execution?"
@@ -23,6 +25,7 @@ For executables and libraries, read [references/program-analysis.md](references/
 ## Deterministic Commands
 
 ```bash
+node "$SKILL_DIR/scripts/vehicle_security.mjs" investigate --objective 'decode diagnostic traffic' --path logs/drive.asc
 node "$SKILL_DIR/scripts/vehicle_security.mjs" audit
 node "$SKILL_DIR/scripts/vehicle_security.mjs" program-analyze --path bin/gateway --focus 'diagnostic authentication'
 node "$SKILL_DIR/scripts/vehicle_security.mjs" uds-decode --payload '03 22 F1 90'
@@ -31,6 +34,7 @@ node "$SKILL_DIR/scripts/vehicle_security.mjs" artifact-triage --path firmware/g
 ```
 
 - `program-analyze --path PATH [--focus TEXT] [--max-strings N]`: collect program identity, ELF metadata and hardening, imports, tagged strings, bounded conclusions, hypotheses, and validation plans.
+- `investigate --objective TEXT [--path PATH] [--input-kind KIND] [--context TEXT]`: rank investigation lanes and return phase gates, first validation actions, language choices, evidence rules, and stop conditions.
 - `audit`: inventory CAN, firmware, reverse-engineering, Android, RF, and debugging tools.
 - `uds-decode --payload PAYLOAD [--no-isotp]`: decode one UDS request or response.
 - `can-summary --path PATH [--id-filter IDS] [--max-frames N]`: summarize saved candump or ASC traffic.

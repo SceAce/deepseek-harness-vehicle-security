@@ -15,12 +15,13 @@ const config = {
   enableBinwalk: false,
 }
 
-test('exports a namespace plugin and registers five tools', () => {
+test('exports a namespace plugin and registers six tools', () => {
   const registered = []
   apply({ tools: { register: tool => registered.push(tool) } }, config)
   assert.equal(name, 'vehicle-security')
   assert.deepEqual(inject, ['tools'])
   assert.deepEqual(registered.map(tool => tool.name), [
+    'vehicle_investigation_plan',
     'vehicle_tool_audit',
     'vehicle_can_log_summary',
     'vehicle_uds_decode',
@@ -40,6 +41,18 @@ test('registered UDS tool validates and executes through defineTool', async () =
   assert.equal(result.dataIdentifier, '0xF190')
 })
 
+test('registered investigation tool routes a prompt through defineTool', async () => {
+  const registered = []
+  apply({ tools: { register: tool => registered.push(tool) } }, config)
+  const tool = registered.find(item => item.name === 'vehicle_investigation_plan')
+  const result = await tool.execute(
+    { objective: 'Decode UDS diagnostic frames', inputKind: 'prompt' },
+    { signal: new AbortController().signal },
+  )
+  assert.equal(result.selectedLane, 'can-uds')
+  assert.equal(result.inputKind, 'prompt')
+})
+
 test('mounts on real Cordis services and cleans up registrations', async () => {
   const ctx = new Context()
   await ctx.plugin(SystemPrompt)
@@ -47,6 +60,7 @@ test('mounts on real Cordis services and cleans up registrations', async () => {
   const fiber = await ctx.plugin(plugin, config)
   const names = ctx.tools.schemas().map(tool => tool.name)
   assert.deepEqual(names.filter(toolName => toolName.startsWith('vehicle_')), [
+    'vehicle_investigation_plan',
     'vehicle_tool_audit',
     'vehicle_can_log_summary',
     'vehicle_uds_decode',

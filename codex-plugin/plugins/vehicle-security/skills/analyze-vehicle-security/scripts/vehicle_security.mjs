@@ -18,7 +18,7 @@ function has(name) {
 }
 
 function usage() {
-  console.error('usage: vehicle_security.mjs audit | uds-decode | can-summary --path PATH | artifact-triage --path PATH | program-analyze --path PATH')
+  console.error('usage: vehicle_security.mjs investigate --objective TEXT [--path PATH] | audit | uds-decode | can-summary --path PATH | artifact-triage --path PATH | program-analyze --path PATH')
   process.exitCode = 2
 }
 
@@ -34,7 +34,26 @@ async function workspaceFile(filePath) {
 }
 
 try {
-  if (command === 'audit') {
+  if (command === 'investigate') {
+    const objective = option('--objective')
+    if (!objective) throw new Error('--objective is required')
+    const inputKind = option('--input-kind')
+    if (inputKind !== undefined && !['artifact', 'prompt', 'lab'].includes(inputKind)) {
+      throw new Error('--input-kind must be artifact, prompt, or lab')
+    }
+    const { planInvestigation } = await runtime('investigation')
+    const filePath = option('--path')
+    const file = filePath ? await workspaceFile(filePath) : null
+    console.log(JSON.stringify(await planInvestigation({
+      objective,
+      inputKind,
+      context: option('--context'),
+    }, file, {
+      enableBinwalk: false,
+      timeoutMs: 20_000,
+      maxOutputChars: 40_000,
+    }), null, 2))
+  } else if (command === 'audit') {
     const { auditTools } = await runtime('audit')
     console.log(JSON.stringify(await auditTools(), null, 2))
   } else if (command === 'uds-decode') {

@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "vehicle-security": {
+      "command": "node",
+      "args": [
+        "mcp/server.mjs"
+      ],
+      "cwd": "."
+    }
+  }
+}

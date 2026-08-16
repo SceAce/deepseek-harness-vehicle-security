@@ -1,0 +1,11 @@
+interface:
+  display_name: "Investigate Vehicle Security"
+  short_description: "Route and validate vehicle-security investigations"
+  default_prompt: "Use $investigate-vehicle-security to triage this input, select the fastest evidence path, and validate the top hypothesis."
+
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "vehicle-security"
+      description: "Portable deterministic vehicle-security intake and analysis tools"
+      transport: "stdio"
