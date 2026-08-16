@@ -31,6 +31,8 @@ pnpm test
 pnpm run check
 ```
 
+源码使用严格模式 TypeScript，`pnpm run build` 将 Harness 产物编译到 `lib/`，并把同一套分析模块同步到 Codex 技能的 `runtime/`。这样可以获得插件配置、工具参数和分析结果的静态类型检查，同时避免 Harness 与 Codex 各自维护一份解析逻辑。
+
 ## 安装到 Harness Web profile
 
 当前 Harness 使用 `next` 发布标签。把本目录作为本地组合包链接到内置 `web` profile：
@@ -79,9 +81,29 @@ Web UI 默认地址是 `http://127.0.0.1:3080`。
 对 firmware/gateway.bin 做只读固件初检。
 ```
 
+## Codex / GPT-5.4
+
+仓库同时包含一个模型无关的 Codex 插件，可用于 GPT-5.4 及其他支持 Codex 技能的模型。入口位于：
+
+```text
+codex-plugin/plugins/vehicle-security
+```
+
+本地 marketplace 位于 `codex-plugin/marketplace.json`。安装后在对话中调用 `$analyze-vehicle-security`，也可以直接验证其确定性命令行助手：
+
+```bash
+SKILL_DIR="$PWD/codex-plugin/plugins/vehicle-security/skills/analyze-vehicle-security"
+node "$SKILL_DIR/scripts/vehicle_security.mjs" audit
+node "$SKILL_DIR/scripts/vehicle_security.mjs" uds-decode --payload '03 22 F1 90'
+node "$SKILL_DIR/scripts/vehicle_security.mjs" can-summary --path fixtures/candump.log
+node "$SKILL_DIR/scripts/vehicle_security.mjs" artifact-triage --path firmware/gateway.bin
+```
+
+Codex 版本复用编译后的 TypeScript 核心模块；修改 `src/*.ts` 后执行 `pnpm run build` 即可同步运行时。
+
 ## 打包分发
 
-该项目使用原生 ESM JavaScript，没有构建步骤。生成的 tarball 可直接安装：
+该项目将 TypeScript 编译为原生 ESM，并同时生成类型声明。生成的 tarball 可直接安装：
 
 ```bash
 pnpm pack

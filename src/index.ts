@@ -1,16 +1,25 @@
 import { readFile } from 'node:fs/promises'
+import type { Context } from '@deepseek-ai/cordis'
 import Schema from '@deepseek-ai/schemastery'
-import { defineTool } from '@deepseek-ai/dsh-tools'
-import { auditTools } from './src/audit.js'
-import { triageArtifact } from './src/artifact.js'
-import { parseCanLog } from './src/can.js'
-import { resolveWorkspaceFile } from './src/paths.js'
-import { decodeUds } from './src/uds.js'
+import { defineTool, type JsonValue } from '@deepseek-ai/dsh-tools'
+import { auditTools } from './audit.js'
+import { triageArtifact } from './artifact.js'
+import { parseCanLog } from './can.js'
+import { resolveWorkspaceFile } from './paths.js'
+import { decodeUds } from './uds.js'
 
 export const name = 'vehicle-security'
 export const inject = ['tools']
 
-export const Config = Schema.object({
+export interface Config {
+  workspaceRoot: string
+  maxFileBytes: number
+  maxOutputChars: number
+  commandTimeoutMs: number
+  enableBinwalk: boolean
+}
+
+export const Config: Schema<Config> = Schema.object({
   workspaceRoot: Schema.string().default('.'),
   maxFileBytes: Schema.number().default(256 * 1024 * 1024),
   maxOutputChars: Schema.number().default(40_000),
@@ -19,11 +28,13 @@ export const Config = Schema.object({
 })
 
 const jsonOutput = {
-  schema: { type: 'json' },
-  render: (_args, value) => [{ type: 'text', text: JSON.stringify(value, null, 2) }],
+  schema: { type: 'json' as const },
+  render: (_args: unknown, value: JsonValue) => [
+    { type: 'text' as const, text: JSON.stringify(value, null, 2) },
+  ],
 }
 
-export function apply(ctx, config) {
+export function apply(ctx: Context, config: Config): void {
   validateConfig(config)
   const commandOptions = {
     timeoutMs: config.commandTimeoutMs,
@@ -38,7 +49,7 @@ export function apply(ctx, config) {
     timeoutMs: config.commandTimeoutMs * 2,
     isConcurrencySafe: () => true,
     async execute(_args, exec) {
-      return auditTools({ ...commandOptions, signal: exec.signal })
+      return auditTools({ ...commandOptions, signal: exec.signal }) as unknown as JsonValue
     },
   }))
 
@@ -69,7 +80,7 @@ export function apply(ctx, config) {
     output: jsonOutput,
     isConcurrencySafe: () => true,
     async execute(args) {
-      return decodeUds(args.payload, args.stripIsoTp ?? true)
+      return decodeUds(args.payload, args.stripIsoTp ?? true) as unknown as JsonValue
     },
   }))
 
@@ -89,12 +100,12 @@ export function apply(ctx, config) {
         ...commandOptions,
         signal: exec.signal,
         enableBinwalk: config.enableBinwalk && (args.runBinwalk ?? true),
-      })
+      }) as unknown as Promise<JsonValue>
     },
   }))
 }
 
-function validateConfig(config) {
+function validateConfig(config: Config): void {
   for (const [key, value] of Object.entries({
     maxFileBytes: config.maxFileBytes,
     maxOutputChars: config.maxOutputChars,

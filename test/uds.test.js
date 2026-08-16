@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { decodeUds, parseHexBytes } from '../src/uds.js'
+import { decodeUds, parseHexBytes } from '../lib/uds.js'
 
 test('decodes an ISO-TP ReadDataByIdentifier request', () => {
   const result = decodeUds('03 22 F1 90')

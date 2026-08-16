@@ -1,6 +1,25 @@
 import { execFile } from 'node:child_process'
 
-export function runCommand(command, args, options = {}) {
+export interface CommandOptions {
+  signal?: AbortSignal
+  timeoutMs?: number
+  maxOutputChars?: number
+  cwd?: string
+}
+
+export interface CommandResult {
+  ok: boolean
+  exitCode: number | null
+  stdout: string
+  stderr: string
+  error: string | null
+}
+
+export function runCommand(
+  command: string,
+  args: readonly string[],
+  options: CommandOptions = {},
+): Promise<CommandResult> {
   const {
     signal,
     timeoutMs = 20_000,
@@ -9,14 +28,14 @@ export function runCommand(command, args, options = {}) {
   } = options
 
   return new Promise((resolve, reject) => {
-    execFile(command, args, {
+    execFile(command, [...args], {
       cwd,
       signal,
       timeout: timeoutMs,
       encoding: 'utf8',
       maxBuffer: Math.max(64 * 1024, maxOutputChars * 4),
       windowsHide: true,
-    }, (error, stdout = '', stderr = '') => {
+    }, (error, stdout, stderr) => {
       if (error?.name === 'AbortError') {
         reject(error)
         return
@@ -33,7 +52,7 @@ export function runCommand(command, args, options = {}) {
   })
 }
 
-export function truncate(value, maxChars) {
+export function truncate(value: string, maxChars: number): string {
   if (value.length <= maxChars) return value
   return `${value.slice(0, maxChars)}\n...[truncated ${value.length - maxChars} chars]`
 }

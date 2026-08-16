@@ -1,0 +1,28 @@
+{
+  "name": "vehicle-security",
+  "version": "0.1.0",
+  "description": "Read-only CAN, UDS, firmware, and vehicle-security analysis for Codex",
+  "author": {
+    "name": "SceAce"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Vehicle Security Analysis",
+    "shortDescription": "Analyze CAN, UDS, firmware, and local tooling",
+    "longDescription": "Deterministic, read-only helpers for vehicle-security competition artifacts, CAN logs, UDS payloads, and local reverse-engineering tool inventory.",
+    "developerName": "SceAce",
+    "category": "Developer Tools",
+    "capabilities": ["CAN log summaries", "UDS decoding", "firmware triage", "tool audits"],
+    "defaultPrompt": "Use $analyze-vehicle-security to inspect the supplied vehicle-security artifacts and report observations with reproducible commands."
+  },
+  "repository": "https://github.com/SceAce/deepseek-harness-vehicle-security",
+  "keywords": [
+    "vehicle-security",
+    "automotive-security",
+    "can-bus",
+    "uds",
+    "firmware",
+    "codex",
+    "gpt-5.4"
+  ]
+}

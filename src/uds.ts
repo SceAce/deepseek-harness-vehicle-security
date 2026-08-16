@@ -1,4 +1,4 @@
-const SERVICES = new Map([
+const SERVICES = new Map<number, string>([
   [0x10, 'DiagnosticSessionControl'],
   [0x11, 'ECUReset'],
   [0x14, 'ClearDiagnosticInformation'],
@@ -19,7 +19,7 @@ const SERVICES = new Map([
   [0x85, 'ControlDTCSetting'],
 ])
 
-const NRC = new Map([
+const NRC = new Map<number, string>([
   [0x10, 'generalReject'], [0x11, 'serviceNotSupported'],
   [0x12, 'subFunctionNotSupported'], [0x13, 'incorrectMessageLengthOrInvalidFormat'],
   [0x21, 'busyRepeatRequest'], [0x22, 'conditionsNotCorrect'],
@@ -31,8 +31,31 @@ const NRC = new Map([
   [0x78, 'requestCorrectlyReceivedResponsePending'],
 ])
 
-export function parseHexBytes(input) {
-  if (typeof input !== 'string') throw new Error('payload must be a string')
+interface TransportPayload {
+  type: 'raw' | 'isotp-single' | 'isotp-first'
+  payload: number[]
+}
+
+export interface UdsDecodeResult {
+  rawHex: string
+  payloadHex: string
+  transport: TransportPayload['type']
+  responseType: 'request' | 'positive' | 'negative'
+  requestServiceId: string
+  service: string
+  dataHex: string
+  serviceId?: string
+  negativeResponseCode?: string
+  negativeResponse?: string
+  dataIdentifier?: string
+  securityLevel?: number
+  securityAccessOperation?: 'requestSeed' | 'sendKey'
+  sessionType?: string
+  routineControlType?: string
+  routineIdentifier?: string
+}
+
+export function parseHexBytes(input: string): number[] {
   const normalized = input.replaceAll(/0x/gi, '').replaceAll(/[^0-9a-f]/gi, '')
   if (normalized.length === 0 || normalized.length % 2 !== 0) {
     throw new Error('payload must contain a non-empty, even number of hex digits')
@@ -41,9 +64,9 @@ export function parseHexBytes(input) {
     Number.parseInt(normalized.slice(index * 2, index * 2 + 2), 16))
 }
 
-export function decodeUds(input, stripIsoTp = true) {
+export function decodeUds(input: string, stripIsoTp = true): UdsDecodeResult {
   const raw = parseHexBytes(input)
-  const transport = stripIsoTp ? unwrapIsoTp(raw) : { type: 'raw', payload: raw }
+  const transport = stripIsoTp ? unwrapIsoTp(raw) : { type: 'raw' as const, payload: raw }
   const payload = transport.payload
   if (payload.length === 0) throw new Error('UDS payload is empty after ISO-TP decoding')
 
@@ -69,7 +92,7 @@ export function decodeUds(input, stripIsoTp = true) {
 
   const positive = sid >= 0x40 && sid < 0xC0 && SERVICES.has(sid - 0x40)
   const requestSid = positive ? sid - 0x40 : sid
-  const result = {
+  const result: UdsDecodeResult = {
     ...base,
     responseType: positive ? 'positive' : 'request',
     serviceId: hexByte(sid),
@@ -93,7 +116,7 @@ export function decodeUds(input, stripIsoTp = true) {
   return result
 }
 
-function unwrapIsoTp(bytes) {
+function unwrapIsoTp(bytes: number[]): TransportPayload {
   const frameType = bytes[0] >> 4
   if (frameType === 0 && bytes[0] <= 0x0F) {
     const length = bytes[0] & 0x0F
@@ -106,10 +129,10 @@ function unwrapIsoTp(bytes) {
   return { type: 'raw', payload: bytes }
 }
 
-function toHex(bytes) {
+function toHex(bytes: number[]): string {
   return bytes.map(hexByte).join(' ')
 }
 
-function hexByte(value) {
+function hexByte(value: number): string {
   return value.toString(16).toUpperCase().padStart(2, '0')
 }

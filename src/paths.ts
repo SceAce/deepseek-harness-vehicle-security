@@ -1,11 +1,20 @@
-import { constants } from 'node:fs'
+import { constants, type Stats } from 'node:fs'
 import { access, realpath, stat } from 'node:fs/promises'
 import path from 'node:path'
 
-export async function resolveWorkspaceFile(workspaceRoot, inputPath, maxFileBytes) {
-  if (typeof inputPath !== 'string' || inputPath.trim() === '') {
-    throw new Error('path must be a non-empty string')
-  }
+export interface ResolvedWorkspaceFile {
+  root: string
+  path: string
+  relativePath: string
+  info: Stats
+}
+
+export async function resolveWorkspaceFile(
+  workspaceRoot: string,
+  inputPath: string,
+  maxFileBytes: number,
+): Promise<ResolvedWorkspaceFile> {
+  if (inputPath.trim() === '') throw new Error('path must be a non-empty string')
 
   const root = await realpath(path.resolve(workspaceRoot))
   const candidate = await realpath(path.resolve(root, inputPath))
@@ -20,14 +29,17 @@ export async function resolveWorkspaceFile(workspaceRoot, inputPath, maxFileByte
   return { root, path: candidate, relativePath: path.relative(root, candidate), info }
 }
 
-export function assertInside(root, candidate) {
+export function assertInside(root: string, candidate: string): void {
   const relative = path.relative(root, candidate)
   if (relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
     throw new Error('path escapes configured workspaceRoot')
   }
 }
 
-export async function findExecutable(name, envPath = process.env.PATH ?? '') {
+export async function findExecutable(
+  name: string,
+  envPath = process.env.PATH ?? '',
+): Promise<string | null> {
   for (const directory of envPath.split(path.delimiter).filter(Boolean)) {
     const candidate = path.join(directory, name)
     try {

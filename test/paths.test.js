@@ -3,7 +3,7 @@ import { mkdtemp, symlink, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
-import { resolveWorkspaceFile } from '../src/paths.js'
+import { resolveWorkspaceFile } from '../lib/paths.js'
 
 test('resolves a regular file inside workspaceRoot', async t => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-vehicle-path-'))

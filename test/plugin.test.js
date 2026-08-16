@@ -3,7 +3,7 @@ import test from 'node:test'
 import { Context } from '@deepseek-ai/cordis'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
-import * as plugin from '../index.js'
+import * as plugin from '../lib/index.js'
 
 const { apply, inject, name } = plugin
 

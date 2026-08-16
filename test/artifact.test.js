@@ -3,8 +3,8 @@ import { mkdtemp, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
-import { triageArtifact } from '../src/artifact.js'
-import { resolveWorkspaceFile } from '../src/paths.js'
+import { triageArtifact } from '../lib/artifact.js'
+import { resolveWorkspaceFile } from '../lib/paths.js'
 
 test('computes deterministic artifact metadata without extraction', async t => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-vehicle-artifact-'))

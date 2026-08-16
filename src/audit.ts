@@ -1,7 +1,7 @@
 import { findExecutable } from './paths.js'
-import { runCommand } from './process.js'
+import { runCommand, type CommandOptions } from './process.js'
 
-const PROBES = [
+const PROBES: ReadonlyArray<readonly [string, readonly string[]]> = [
   ['candump', ['-h']],
   ['binwalk', ['--version']],
   ['gdb', ['--version']],
@@ -18,17 +18,30 @@ const PROBES = [
   ['pulseview', ['--version']],
 ]
 
-export async function auditTools(options = {}) {
-  const rows = []
-  for (const [name, args] of PROBES) {
-    const executable = await findExecutable(name)
+export interface ToolAuditRow {
+  name: string
+  available: boolean
+  path: string | null
+  version: string | null
+}
+
+export interface ToolAuditResult {
+  available: number
+  missing: number
+  tools: ToolAuditRow[]
+}
+
+export async function auditTools(options: CommandOptions = {}): Promise<ToolAuditResult> {
+  const rows: ToolAuditRow[] = []
+  for (const [toolName, args] of PROBES) {
+    const executable = await findExecutable(toolName)
     if (!executable) {
-      rows.push({ name, available: false, path: null, version: null })
+      rows.push({ name: toolName, available: false, path: null, version: null })
       continue
     }
     const result = await runCommand(executable, args, options)
     const firstLine = `${result.stdout}\n${result.stderr}`.split(/\r?\n/).find(Boolean) ?? null
-    rows.push({ name, available: true, path: executable, version: firstLine })
+    rows.push({ name: toolName, available: true, path: executable, version: firstLine })
   }
 
   rows.push(await probePwndbg(options))
@@ -39,7 +52,7 @@ export async function auditTools(options = {}) {
   }
 }
 
-async function probePwndbg(options) {
+async function probePwndbg(options: CommandOptions): Promise<ToolAuditRow> {
   const gdb = await findExecutable('gdb')
   if (!gdb) return { name: 'pwndbg', available: false, path: null, version: null }
   const script = 'import pwndbg; print(getattr(pwndbg, "__version__", "loaded"))'
