@@ -1,0 +1,9 @@
+- insert:
+    - id: vehicle-security
+      name: dsh-vehicle-security
+      config:
+        workspaceRoot: '.'
+        maxFileBytes: 268435456
+        maxOutputChars: 40000
+        commandTimeoutMs: 20000
+        enableBinwalk: true
