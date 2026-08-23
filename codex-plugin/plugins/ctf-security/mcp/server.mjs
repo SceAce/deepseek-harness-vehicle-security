@@ -115,6 +115,30 @@ const tools = [
     },
   },
   {
+    name: 'ctf_pwninit',
+    description: 'Use pwninit to select a matching loader/libc, patch or diagnose the local runtime, and inspect or restore backups.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ...workspaceProperties,
+        path: { type: 'string' },
+        mode: { type: 'string', enum: ['prepare', 'doctor', 'restore', 'list_backups'] },
+        libcPath: { type: 'string' },
+        ldPath: { type: 'string' },
+        dependencyDir: { type: 'string' },
+        libcVersion: { type: 'string' },
+        libcIndex: { type: 'integer' },
+        onlyLibc: { type: 'boolean' },
+        onlyInit: { type: 'boolean' },
+        generateExp: { type: 'boolean' },
+        forceExp: { type: 'boolean' },
+        debug: { type: 'boolean' },
+      },
+      required: ['workspaceRoot', 'path'],
+      additionalProperties: false,
+    },
+  },
+  {
     name: 'ctf_pwn_debug_probe',
     description: 'Run a bounded gdb batch probe on a local pwn binary.',
     inputSchema: {
@@ -389,6 +413,22 @@ async function callTool(name, args) {
     case 'ctf_pwn_profile': {
       const { profilePwnArtifact } = await runtime('binary')
       return profilePwnArtifact(await workspaceFile(args), commandOptions)
+    }
+    case 'ctf_pwninit': {
+      const { runPwninit } = await runtime('pwninit')
+      return runPwninit(await workspaceFile(args), {
+        mode: args.mode,
+        libcPath: args.libcPath,
+        ldPath: args.ldPath,
+        dependencyDir: args.dependencyDir,
+        libcVersion: args.libcVersion,
+        libcIndex: args.libcIndex,
+        onlyLibc: args.onlyLibc,
+        onlyInit: args.onlyInit,
+        generateExp: args.generateExp,
+        forceExp: args.forceExp,
+        debug: args.debug,
+      }, commandOptions)
     }
     case 'ctf_pwn_debug_probe': {
       const { debugPwnArtifact } = await runtime('binary')

@@ -163,6 +163,7 @@ CTF 侧目标是工具优先：先审计本机能力、初检文件或 URL，再
 | `ctf_re_r2_query` | 调用本机 radare2 执行受限的 headless 命令并保留 JSON/原始输出 |
 | `ctf_re_ida_script` | 生成以 IDAPython 为主的函数、字符串和交叉引用分析脚本；可选 IDA batch 执行 |
 | `ctf_pwn_profile` | 提取 ELF 保护、导入、字符串、checksec 输出和后续调试/gadget 动作 |
+| `ctf_pwninit` | 使用本机 pwninit 自动选择/切换 `ld` 与 `libc`，执行诊断、备份列表和恢复；默认不进入交互向导 |
 | `ctf_pwn_debug_probe` | 用 GDB batch 采集入口点、寄存器、栈、反汇编和回溯 |
 | `ctf_pwn_gdb_probe` | 用 GDB/Pwndbg 执行 `context`、`vmmap`、寄存器和回溯探针 |
 | `ctf_rop_search` | 调用 ROPgadget 或 ropper 搜索 gadget |
@@ -257,6 +258,7 @@ export DSH_CTF_MCP_CONFIG="$PWD/ctf-mcp.json"
 | 工具 | 建议用途 | 插件行为 |
 | --- | --- | --- |
 | GDB + Pwndbg | Pwn 动态状态、堆、寄存器、映射 | `ctf_pwn_gdb_probe` 直接批处理调用 |
+| pwninit | 题目 loader/libc 选择、patchelf、备份/恢复、patch 后诊断 | `ctf_pwninit`；自动扫描同目录 `ld-*`/`libc-*`，优先使用非交互 `-W` |
 | radare2 | CLI 逆向、JSON 画像、xrefs | `ctf_re_r2_query` 直接调用 |
 | IDA Pro + IDAPython | 深入函数、交叉引用、反编译器脚本 | `ctf_re_ida_script` 生成/可选执行脚本 |
 | mcp-chrome | 页面、DOM、Console、网络、标签页、Cookie 和截图 | 交互浏览器主路径；不可用时回退 `ctf_web_browser_probe` |
@@ -314,6 +316,7 @@ npx @deepseek-ai/dsh@next web
 先用 ctf_start 分析 chall，类别自动判断。
 使用 ctf_tool_audit 检查本机 CTF 工具。
 对 chall 做 ctf_pwn_profile，然后按 nextActions 选择 GDB 或 ROP 工具。
+如果工作区同时有 `ld-*.so*` 和 `libc-*.so*`，先对 chall 调用 `ctf_pwninit`，再重新调用 `ctf_pwn_gdb_probe` 验证目标 glibc 已加载。
 对 cipher.txt 做 ctf_crypto_probe，先不要写脚本。
 对 capture.pcapng 做 ctf_pcap_profile。
 对 http://127.0.0.1:8080/ 做 ctf_http_request，并用 ctf_http_diff 对比参数变化。

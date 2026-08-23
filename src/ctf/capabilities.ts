@@ -83,6 +83,7 @@ const PROBES: CapabilityProbe[] = [
   { id: 'pwn.ropper', category: 'pwn', executable: 'ropper', args: ['--version'], operations: ['ROP gadget search'] },
   { id: 'pwn.one_gadget', category: 'pwn', executable: 'one_gadget', args: ['--version'], operations: ['libc one_gadget search'] },
   { id: 'pwn.seccomp_tools', category: 'pwn', executable: 'seccomp-tools', args: ['--version'], operations: ['seccomp rule dump and inspection'] },
+  { id: 'pwn.pwninit', category: 'pwn', executable: 'pwninit', args: ['--version'], operations: ['loader/libc selection', 'patchelf runtime setup', 'backup and restore', 'patched runtime diagnosis'], features: ['glibc-switch', 'backup-restore', 'doctor'] },
   { id: 'crypto.sage', category: 'crypto', executable: 'sage', args: ['--version'], operations: ['number theory and symbolic math'] },
   { id: 'crypto.gp', category: 'crypto', executable: 'gp', args: ['--version'], operations: ['PARI/GP number theory'] },
   { id: 'web.curl', category: 'web', executable: 'curl', args: ['--version'], operations: ['HTTP request baseline'] },
@@ -373,6 +374,7 @@ function recommendations(capabilities: CtfCapability[], modules: CtfCapability[]
   if (!available.has('pwn.gdb')) result.push('Install gdb for pwn runtime probes.')
   if (!available.has('pwn.pwndbg')) result.push('Configure pwndbg inside gdb for context, vmmap, heap, and register views.')
   if (!available.has('pwn.checksec')) result.push('Install checksec for a concise mitigation summary.')
+  if (!available.has('pwn.pwninit')) result.push('Install or expose pwninit for deterministic loader/libc selection, patching, backup, and restore.')
   if (!available.has('python.pwntools')) result.push('Install pwntools for pwn process automation.')
   if (!available.has('pwn.ropgadget') && !available.has('pwn.ropper')) result.push('Install ROPgadget or ropper for gadget enumeration.')
   if (!available.has('re.ida_cli') && !mcp.some(item => item.id === 'mcp.ida_pro' && item.configured)) {

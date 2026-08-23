@@ -26,6 +26,7 @@ const CTF_TOOL_NAMES = [
   'ctf_start',
   'ctf_re_profile',
   'ctf_pwn_profile',
+  'ctf_pwninit',
   'ctf_pwn_debug_probe',
   'ctf_pwn_gdb_probe',
   'ctf_re_r2_query',
@@ -154,8 +155,63 @@ test('ctf_pwn_profile returns structured binary facts for an ELF artifact', asyn
 
   assert.equal(result.artifact.path, 'chall')
   assert.equal(result.binary.format, 'elf')
+  assert.ok(result.nextActions.some(action => action.tool === 'ctf_pwninit'))
   assert.ok(result.nextActions.some(action => action.tool === 'ctf_pwn_gdb_probe'))
   assert.ok(result.nextActions.some(action => action.tool === 'ctf_pwn_debug_probe'))
+})
+
+test('ctf_pwninit exposes deterministic runtime and backup operations', async t => {
+  const workspace = await mkdtemp(path.join(os.tmpdir(), 'dsh-ctf-pwninit-'))
+  t.after(() => import('node:fs/promises').then(fs => fs.rm(workspace, { recursive: true, force: true })))
+  await copyFile('/bin/true', path.join(workspace, 'chall'))
+
+  const registered = []
+  ctfPlugin.apply({ tools: { register: tool => registered.push(tool) } }, {
+    ...config,
+    workspaceRoot: undefined,
+    commandTimeoutMs: 5000,
+  })
+  const pwninit = registered.find(item => item.name === 'ctf_pwninit')
+  const result = await pwninit.execute(
+    { path: 'chall', mode: 'list_backups' },
+    {
+      signal: new AbortController().signal,
+      agent: { session: { header: { cwd: workspace } } },
+    },
+  )
+
+  if (result.status === 'missing_capability') {
+    t.skip('pwninit is not installed in this test environment')
+    return
+  }
+  assert.equal(result.pwninit.mode, 'list_backups')
+  assert.equal(result.pwninit.binary, 'chall')
+  assert.ok(result.commands.some(command => command.argv.includes('--list-backups')))
+})
+
+test('ctf_pwninit stays lossless through the real DSH tool runtime', async t => {
+  const workspace = await mkdtemp(path.join(os.tmpdir(), 'dsh-ctf-pwninit-runtime-'))
+  t.after(() => import('node:fs/promises').then(fs => fs.rm(workspace, { recursive: true, force: true })))
+  await copyFile('/bin/true', path.join(workspace, 'chall'))
+
+  const ctx = new Context()
+  await ctx.plugin(SystemPrompt)
+  await ctx.plugin(ToolRuntime, { mode: 'native' })
+  await ctx.plugin(ctfPlugin, {
+    ...config,
+    workspaceRoot: workspace,
+    commandTimeoutMs: 5000,
+  })
+
+  const result = await ctx.tools.execute({
+    callId: 'ctf-runtime-pwninit',
+    name: 'ctf_pwninit',
+    arguments: { path: 'chall', mode: 'list_backups' },
+    signal: new AbortController().signal,
+  })
+
+  assert.equal(result.isError, false)
+  assert.ok(result.content.some(block => block.type === 'text'))
 })
 
 test('ctf_pwn_gdb_probe calls local GDB with Pwndbg commands', async t => {

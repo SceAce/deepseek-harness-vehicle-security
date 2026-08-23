@@ -161,6 +161,7 @@ test('Codex CTF MCP initializes, lists tools, and probes crypto text', async t =
     'ctf_re_r2_query',
     'ctf_re_ida_script',
     'ctf_pwn_profile',
+    'ctf_pwninit',
     'ctf_pwn_debug_probe',
     'ctf_pwn_gdb_probe',
     'ctf_rop_search',
