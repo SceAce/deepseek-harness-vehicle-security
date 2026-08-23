@@ -1,7 +1,7 @@
 interface:
   display_name: "Solve CTF Web"
   short_description: "Tool-first web challenge workflow"
-  default_prompt: "Use $solve-ctf-web, call ctf_tool_audit first, prefer mcp-chrome for interactive browser state and Tavily for CVE/version research, then compare request diffs before writing custom web code."
+  default_prompt: "Use $solve-ctf-web. Inspect ctf_tool_audit/toolBindings when capability state is unknown, then choose ctf_http_request, ctf_http_diff, mcp.chrome, ctf_web_browser_probe, or ctf_web_capture_probe according to the evidence question. Do not assume a fixed tool order."
 
 dependencies:
   tools:
