@@ -22,6 +22,20 @@ const tools = [
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },
   },
   {
+    name: 'ctf_python_exec',
+    description: 'Execute inline Python or a workspace script with the fixed CTF interpreter /home/source/tools/PyVenv/CTF/bin/python. It never falls back to another Python.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ...workspaceProperties,
+        code: { type: 'string' },
+        scriptPath: { type: 'string' },
+        argv: { type: 'array', items: { type: 'string' } },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
     name: 'ctf_mcp_configure',
     description: 'Write the CTF MCP configuration for mcp-chrome and Tavily without exposing API keys in output.',
     inputSchema: {
@@ -331,6 +345,18 @@ async function callTool(name, args) {
     case 'ctf_tool_audit': {
       const { auditCtfTools } = await runtime('capabilities')
       return auditCtfTools(commandOptions)
+    }
+    case 'ctf_python_exec': {
+      const { runCtfPython } = await runtime('python')
+      return runCtfPython({
+        code: args.code,
+        scriptPath: args.scriptPath,
+        argv: args.argv,
+      }, {
+        ...commandOptions,
+        workspaceRoot: args.workspaceRoot,
+        maxFileBytes,
+      })
     }
     case 'ctf_mcp_configure': {
       const { configureCtfMcp } = await runtime('mcp')

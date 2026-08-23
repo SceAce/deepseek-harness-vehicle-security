@@ -23,6 +23,7 @@ const config = {
 const CTF_TOOL_NAMES = [
   'ctf_tool_audit',
   'ctf_mcp_configure',
+  'ctf_python_exec',
   'ctf_artifact_profile',
   'ctf_start',
   'ctf_re_profile',
@@ -132,6 +133,20 @@ test('uses the fixed CTF Python interpreter without environment fallbacks', asyn
     if (previous.virtualEnv === undefined) delete process.env.VIRTUAL_ENV
     else process.env.VIRTUAL_ENV = previous.virtualEnv
   }
+})
+
+test('ctf_python_exec always uses the fixed CTF interpreter', async () => {
+  const registered = []
+  ctfPlugin.apply({ tools: { register: tool => registered.push(tool) } }, config)
+  const python = registered.find(item => item.name === 'ctf_python_exec')
+  const result = await python.execute(
+    { code: 'import sys; print(sys.executable)' },
+    { signal: new AbortController().signal, agent: { session: { header: { cwd: process.cwd() } } } },
+  )
+
+  assert.equal(result.status, 'ok')
+  assert.equal(result.python.executable, DEFAULT_CTF_PYTHON)
+  assert.ok(result.output.includes(DEFAULT_CTF_PYTHON))
 })
 
 test('detects an IDA CLI absolute path supplied through DSH_CTF_IDA', async t => {
@@ -360,6 +375,10 @@ test('ctf_tool_audit exposes local capability and external MCP state', async () 
   const gdbBinding = result.toolBindings.find(item => item.tool === 'ctf_pwn_gdb_probe')
   assert.equal(gdbBinding.callable, true)
   assert.ok(gdbBinding.backendCapabilities.includes('pwn.gdb'))
+  const pythonBinding = result.toolBindings.find(item => item.tool === 'ctf_python_exec')
+  assert.equal(pythonBinding.callable, true)
+  assert.ok(pythonBinding.backendCapabilities.includes('python.fixed'))
+  assert.equal(pythonBinding.availability, 'ready')
   const r2Binding = result.toolBindings.find(item => item.tool === 'ctf_re_r2_query')
   assert.equal(r2Binding.callable, true)
   assert.ok(r2Binding.exampleArgs.commands.includes('aaa'))

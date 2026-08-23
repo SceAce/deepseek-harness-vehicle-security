@@ -16,7 +16,8 @@ description: Tool-first pwn skill for binaries, heap, stack, ROP, and debugger-d
 7. Choose `ctf_rop_search` for gadget enumeration when the mitigation and control-flow hypothesis calls for it.
 8. Use `mcp.tavily` for libc, CVE, package-version, or debugger-reference lookup when required.
 9. Use `ctf_tool_setup` with `gdb_pwndbg` when the selected local debugger backend is missing.
-10. Use `ctf_human_request` when the program needs a user-run service, device, GUI, or screenshot/log/OCR return.
+10. Use `ctf_python_exec` for Python helpers; it always uses `/home/source/tools/PyVenv/CTF/bin/python`.
+11. Use `ctf_human_request` when the program needs a user-run service, device, GUI, or screenshot/log/OCR return.
 
 ## Tool Graph
 
@@ -37,5 +38,6 @@ prompt-only -> ctf_start -> ctf_tool_audit -> ctf_pwn_profile
 - `ctf_pwninit` is mandatory before other Pwn analysis actions. It auto-detects sibling `ld-*` and `libc-*` files, runs initialization when no pair exists, and uses pwninit backups before patching.
 - After `ctf_pwninit`, rerun a debugger probe only when runtime evidence is needed; use the patched binary so the observed loader and libc match the challenge files.
 - Every Python command must use `/home/source/tools/PyVenv/CTF/bin/python`.
+- Prefer `ctf_python_exec` for inline Python or a workspace script instead of composing a generic shell Python command.
 - Record exact argv, breakpoint names, register dumps, and observed transitions.
 - Use scripts only after the debugger or gadget tools leave a real gap.

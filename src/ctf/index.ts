@@ -9,6 +9,7 @@ import { probeCryptoInput } from './crypto.js'
 import { createHumanRequest, operationsFromLegacySteps } from './human.js'
 import { configureCtfMcp } from './mcp.js'
 import { profilePcapArtifact, triageMiscArtifact } from './misc.js'
+import { runCtfPython } from './python.js'
 import { routeCtfStart } from './router.js'
 import { buildIdaScriptPlan, queryRadare2 } from './retools.js'
 import { createToolSetupRequest, type CtfSetupTarget } from './setup.js'
@@ -78,6 +79,31 @@ export function apply(ctx: Context, config: Config): void {
         includeChrome: args.includeChrome,
         includeTavily: args.includeTavily,
         tavilyApiKey: args.tavilyApiKey,
+      }) as unknown as Promise<JsonValue>
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'ctf_python_exec',
+    description: 'Execute inline Python or a workspace script with the fixed CTF interpreter /home/source/tools/PyVenv/CTF/bin/python. Never falls back to python3, PATH Python, or another virtual environment.',
+    parameters: {
+      code: { type: 'string', description: 'Inline Python source; provide this or scriptPath' },
+      scriptPath: { type: 'string', description: 'Python script path relative to the active workspace; provide this or code' },
+      argv: { type: 'array', items: { type: 'string' }, description: 'Optional script arguments' },
+    },
+    output: jsonOutput,
+    timeoutMs: config.commandTimeoutMs * 2,
+    isConcurrencySafe: () => true,
+    async execute(args, exec) {
+      return runCtfPython({
+        code: args.code,
+        scriptPath: args.scriptPath,
+        argv: args.argv,
+      }, {
+        ...commandOptions,
+        workspaceRoot: executionWorkspace(config, exec),
+        maxFileBytes: config.maxFileBytes,
+        signal: exec.signal,
       }) as unknown as Promise<JsonValue>
     },
   }))

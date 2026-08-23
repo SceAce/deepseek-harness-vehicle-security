@@ -157,6 +157,7 @@ CTF 侧目标是工具优先：先审计本机能力、初检文件或 URL，再
 | --- | --- |
 | `ctf_start` | CTF 路由和能力快照：审计本机能力、初检附件、判断 RE/Pwn/Crypto/Misc/Web，并返回排序后的工具选择 |
 | `ctf_tool_audit` | 检查本机 CTF 能力，并返回可调用工具的本地绑定、后端依赖、可用状态和示例参数 |
+| `ctf_python_exec` | 使用固定的 `/home/source/tools/PyVenv/CTF/bin/python` 执行内联 Python 或工作区脚本，不回退其他解释器 |
 | `ctf_mcp_configure` | 自动生成 CTF 外部 MCP 配置；只接收 `TAVILY_API_KEY` 等 secret，不要求手写 JSON 或路径 |
 | `ctf_artifact_profile` | 对文件做 hash、大小、magic、file 类型、熵和文本样本初检 |
 | `ctf_re_profile` | 用 `file/readelf/strings` 等工具提取逆向线索 |
@@ -329,6 +330,7 @@ npx @deepseek-ai/dsh@next web
 使用 ctf_tool_audit 检查本机 CTF 工具。
 对 chall 先调用 `ctf_pwninit`，再根据漏洞假设从 nextActions/toolChoices 中选择 `ctf_pwn_profile`、GDB/Pwndbg、r2 或 ROP 工具。
 如果工作区同时有 `ld-*.so*` 和 `libc-*.so*`，`ctf_pwninit` 会先切换运行时，再调用 `ctf_pwn_gdb_probe` 验证目标 glibc 已加载。
+Python 辅助代码优先调用 `ctf_python_exec`，它固定使用 `/home/source/tools/PyVenv/CTF/bin/python`。
 对 cipher.txt 做 ctf_crypto_probe，先不要写脚本。
 对 capture.pcapng 做 ctf_pcap_profile。
 对 http://127.0.0.1:8080/ 做 ctf_http_request，并用 ctf_http_diff 对比参数变化。

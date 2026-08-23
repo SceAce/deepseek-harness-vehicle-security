@@ -12,7 +12,7 @@ Use the tool layer before writing a solver. When the local capability state or a
 - 除工具名、命令、路径、代码、协议字段和原始日志外，模型必须使用中文交流。
 - 对 Pwn 二进制，`ctf_pwninit` 是第一项模型可见的 Pwn 动作。调用 `ctf_start` 后，按其返回的 `recommendedTool` 和 `toolChoices[0]` 调用 `ctf_pwninit`；不要先调用 `ctf_pwn_profile`、GDB、r2 或自写 Python。
 - `ctf_pwninit` 没有匹配的 `ld`/`libc` 时会自动执行 `--only-init`，随后再进入画像和运行时选择；这不是跳过该首步的理由。
-- 所有 Python 命令、脚本执行和模块检查必须使用 `/home/source/tools/PyVenv/CTF/bin/python`，不得回退到 `python`、`python3`、`$VIRTUAL_ENV` 或工作区虚拟环境。
+- 所有 Python 命令、脚本执行和模块检查必须使用 `/home/source/tools/PyVenv/CTF/bin/python`，不得回退到 `python`、`python3`、`$VIRTUAL_ENV` 或工作区虚拟环境。优先调用 `ctf_python_exec` 执行内联代码或工作区脚本。
 
 ## Core Rule
 
@@ -29,7 +29,7 @@ Use the tool layer before writing a solver. When the local capability state or a
 ## Tool Map
 
 - Intake: `ctf_start`, `ctf_tool_audit`, `ctf_artifact_profile`
-- RE/Pwn: `ctf_re_profile`, `ctf_pwn_profile`, `ctf_pwninit`, `ctf_pwn_debug_probe`, `ctf_pwn_gdb_probe`, `ctf_rop_search`
+- RE/Pwn: `ctf_re_profile`, `ctf_pwn_profile`, `ctf_pwninit`, `ctf_pwn_debug_probe`, `ctf_pwn_gdb_probe`, `ctf_rop_search`, `ctf_python_exec`
 - Crypto/Misc: `ctf_crypto_probe`, `ctf_misc_triage`, `ctf_pcap_profile`
 - Web: `ctf_http_request`, `ctf_http_diff`, `ctf_web_browser_probe`, `ctf_web_capture_probe`
 - MCP/configuration: `ctf_mcp_configure`, `mcp.ida_pro`, `mcp.r2`, `mcp.gdb_pwndbg`, `mcp.chrome`, `mcp.tavily`

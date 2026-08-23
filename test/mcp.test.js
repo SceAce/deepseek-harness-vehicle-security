@@ -154,6 +154,7 @@ test('Codex CTF MCP initializes, lists tools, and probes crypto text', async t =
   const listed = await request('tools/list')
   assert.deepEqual(listed.result.tools.map(tool => tool.name), [
     'ctf_tool_audit',
+    'ctf_python_exec',
     'ctf_mcp_configure',
     'ctf_artifact_profile',
     'ctf_start',
@@ -190,6 +191,13 @@ test('Codex CTF MCP initializes, lists tools, and probes crypto text', async t =
   assert.equal(audit.result.isError, false)
   assert.ok(audit.result.structuredContent.toolBindings.some(binding => binding.tool === 'ctf_pwn_gdb_probe'))
   assert.ok(audit.result.structuredContent.toolBindings.some(binding => binding.tool === 'ctf_re_r2_query'))
+
+  const python = await request('tools/call', {
+    name: 'ctf_python_exec',
+    arguments: { code: 'import sys; print(sys.executable)' },
+  })
+  assert.equal(python.result.isError, false)
+  assert.equal(python.result.structuredContent.python.executable, '/home/source/tools/PyVenv/CTF/bin/python')
 
   const configured = await request('tools/call', {
     name: 'ctf_mcp_configure',

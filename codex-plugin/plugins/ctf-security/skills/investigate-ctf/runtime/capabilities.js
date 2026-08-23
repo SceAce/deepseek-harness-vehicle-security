@@ -111,7 +111,7 @@ export async function auditCtfTools(options = {}) {
             modules: python.modules,
         },
         mcp,
-        toolBindings: buildToolBindings(capabilities, python.modules),
+        toolBindings: buildToolBindings(capabilities, python.modules, Boolean(python.executable)),
         commands: [...commands, ...python.commands, ...pwndbg.commands],
         recommendations: recommendations(capabilities, python.modules, mcp),
     };
@@ -350,6 +350,14 @@ function recommendations(capabilities, modules, mcp) {
 }
 const TOOL_BINDINGS = [
     {
+        tool: 'ctf_python_exec',
+        category: 'auto',
+        purpose: 'Run inline Python or a workspace script through the fixed CTF Python interpreter.',
+        when: 'A Python helper is required after the installed CTF tools leave a concrete gap.',
+        backendCapabilities: ['python.fixed'],
+        exampleArgs: { code: 'print("ctf-python-ready")' },
+    },
+    {
         tool: 'ctf_artifact_profile',
         category: 'auto',
         purpose: 'Hash and identify one local challenge artifact.',
@@ -450,8 +458,10 @@ const TOOL_BINDINGS = [
         exampleArgs: { url: 'http://HOST:PORT/', captureScreenshot: true },
     },
 ];
-function buildToolBindings(capabilities, modules) {
+function buildToolBindings(capabilities, modules, fixedPythonAvailable) {
     const available = new Set([...capabilities, ...modules].filter(item => item.available).map(item => item.id));
+    if (fixedPythonAvailable)
+        available.add('python.fixed');
     return TOOL_BINDINGS.map(spec => {
         const availableCapabilities = spec.anyBackend
             ? spec.backendCapabilities.filter(item => available.has(item))

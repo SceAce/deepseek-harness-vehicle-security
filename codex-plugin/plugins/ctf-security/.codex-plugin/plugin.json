@@ -23,7 +23,7 @@
       "Pwn tool graph",
       "Web tool graph"
     ],
-    "defaultPrompt": "处理 CTF 任务时，除工具名、命令、路径、代码和原始日志外使用中文。能力未知时检查 ctf_tool_audit/toolBindings，再依据证据选择可调用的本机工具和已配置 MCP。Pwn 二进制必须先调用 ctf_pwninit(mode=prepare)，再选择画像、r2、GDB/Pwndbg 或 gadget 工具。所有 Python 命令必须使用 /home/source/tools/PyVenv/CTF/bin/python。交互浏览器使用 mcp-chrome，CVE/版本资料使用 Tavily MCP，IDA 优先使用已配置 IDA MCP，也可使用插件检测到的本机 IDA CLI 路径。只有相关工具留下明确缺口后才写新脚本；只缺 TAVILY_API_KEY 时使用 ctf_mcp_configure。"
+    "defaultPrompt": "处理 CTF 任务时，除工具名、命令、路径、代码和原始日志外使用中文。能力未知时检查 ctf_tool_audit/toolBindings，再依据证据选择可调用的本机工具和已配置 MCP。Pwn 二进制必须先调用 ctf_pwninit(mode=prepare)，再选择画像、r2、GDB/Pwndbg 或 gadget 工具。所有 Python 命令必须使用 /home/source/tools/PyVenv/CTF/bin/python，优先调用 ctf_python_exec 执行内联代码或工作区脚本。交互浏览器使用 mcp-chrome，CVE/版本资料使用 Tavily MCP，IDA 优先使用已配置 IDA MCP，也可使用插件检测到的本机 IDA CLI 路径。只有相关工具留下明确缺口后才写新脚本；只缺 TAVILY_API_KEY 时使用 ctf_mcp_configure。"
   },
   "repository": "https://github.com/SceAce/deepseek-harness-vehicle-security",
   "keywords": [
