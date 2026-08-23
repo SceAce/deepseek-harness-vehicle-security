@@ -32,6 +32,7 @@
     "codex-plugin/plugins/vehicle-security",
     "codex-plugin/plugins/ctf-security",
     "cordis.patch.yml",
+    "cordis.ctf.patch.yml",
     "README.md",
     "LICENSE"
   ],

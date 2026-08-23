@@ -14,6 +14,14 @@ Use the tool layer before writing a solver. The first action for any CTF prompt 
 3. If a tool returns `humanRequired`, present the request as a structured action for the user and wait for the returned fields.
 4. Write a new script only after the tool audit shows no suitable local capability or the existing tools produced a concrete gap.
 
+## Tool Map
+
+- Intake: `ctf_start`, `ctf_tool_audit`, `ctf_artifact_profile`
+- RE/Pwn: `ctf_re_profile`, `ctf_pwn_profile`, `ctf_pwn_debug_probe`, `ctf_rop_search`
+- Crypto/Misc: `ctf_crypto_probe`, `ctf_misc_triage`, `ctf_pcap_profile`
+- Web: `ctf_http_request`, `ctf_http_diff`
+- Human actions: `ctf_human_request`
+
 ## Evidence
 
 Keep the same lightweight model across categories:

@@ -1,4 +1,4 @@
-# DeepSeek Harness 车联网安全插件
+# DeepSeek Harness 车联网安全与 CTF 工具插件
 
 面向车联网比赛和本地样本分析的 DeepSeek Harness + Codex 组合包。Harness 侧按官方插件架构组合一个工具插件和一个 Skill Provider 插件，当前版本提供一个正式调查流程和六个确定性工具：
 
@@ -141,3 +141,76 @@ npx @deepseek-ai/dsh@next plugin --profile web add ./dsh-vehicle-security-0.2.0.
 ```
 
 下一阶段适合增加 DBC 信号解码、DoIP/SOME-IP 报文分析、UDS 会话日志重建、IDA/r2 高层调查动作和可持久化 case 状态更新工具。
+
+## CTF 工具插件
+
+仓库同时提供独立的 CTF 工具层，入口和车联网工具分开：
+
+```text
+dsh-vehicle-security/ctf-tools   -> 注册 ctf_* 工具
+dsh-vehicle-security/ctf-skills  -> 提供 investigate-ctf Skill
+```
+
+CTF 侧目标是工具优先：先审计本机能力、初检文件或 URL，再选择已有工具。只有在现有工具缺口明确时，模型才应该写临时脚本。需要用户启动服务、操作 GUI、连接设备、提供数据或确认会改动工作区的步骤时，使用 `ctf_human_request` 输出结构化人工动作。
+
+| 工具 | 用途 |
+| --- | --- |
+| `ctf_start` | CTF 第一入口：审计本机能力、初检附件、判断 RE/Pwn/Crypto/Misc/Web，并给出下一步工具 |
+| `ctf_tool_audit` | 检查本机 CTF 能力：binutils、GDB、pwntools、Sage/Z3、tshark、curl 等 |
+| `ctf_artifact_profile` | 对文件做 hash、大小、magic、file 类型、熵和文本样本初检 |
+| `ctf_re_profile` | 用 `file/readelf/strings` 等工具提取逆向线索 |
+| `ctf_pwn_profile` | 提取 ELF 保护、导入、字符串、checksec 输出和后续调试/gadget 动作 |
+| `ctf_pwn_debug_probe` | 用 GDB batch 采集入口点、寄存器、栈、反汇编和回溯 |
+| `ctf_rop_search` | 调用 ROPgadget 或 ropper 搜索 gadget |
+| `ctf_crypto_probe` | 检测 hex/base64/binary-ascii、熵、hash 和单字节 XOR 候选 |
+| `ctf_misc_triage` | 用 binwalk、exiftool、7z、strings、zsteg 做 Misc/取证初检 |
+| `ctf_pcap_profile` | 用 tshark 汇总 PCAP 协议层级和 TCP/UDP 会话 |
+| `ctf_http_request` | 用 curl 发起结构化 HTTP 请求并返回状态、长度、hash 和预览 |
+| `ctf_http_diff` | 对比两次 HTTP 请求的状态、长度和响应 hash |
+| `ctf_human_request` | 生成结构化人工动作请求，把用户当作可调用的电脑/环境 MCP |
+
+### 安装到 Harness Web profile
+
+默认组合包 `cordis.patch.yml` 会同时启用车联网和 CTF 插件：
+
+```bash
+cd /path/to/deepseek-harness-vehicle-security
+npx @deepseek-ai/dsh@next plugin --profile web add .
+npx @deepseek-ai/dsh@next web --dump-config
+```
+
+如果只需要 CTF 侧配置，可以参考 `cordis.ctf.patch.yml` 中的两个条目，只启用：
+
+```yaml
+- id: ctf-tools
+  name: dsh-vehicle-security/ctf-tools
+- id: ctf-skills
+  name: dsh-vehicle-security/ctf-skills
+```
+
+从题目工作目录启动 DSH，这样文件类工具会使用当前会话的工作区：
+
+```bash
+cd /path/to/ctf-challenge
+npx @deepseek-ai/dsh@next web
+```
+
+### CTF 调用示例
+
+```text
+先用 ctf_start 分析 chall，类别自动判断。
+使用 ctf_tool_audit 检查本机 CTF 工具。
+对 chall 做 ctf_pwn_profile，然后按 nextActions 选择 GDB 或 ROP 工具。
+对 cipher.txt 做 ctf_crypto_probe，先不要写脚本。
+对 capture.pcapng 做 ctf_pcap_profile。
+对 http://127.0.0.1:8080/ 做 ctf_http_request，并用 ctf_http_diff 对比参数变化。
+服务还没启动，生成 ctf_human_request 告诉我要做什么并返回哪些字段。
+```
+
+Codex 插件位于：
+
+```text
+codex-plugin/plugins/ctf-security
+```
+
+本地 marketplace 已包含 `ctf-security`。Codex 安装后优先使用 `$investigate-ctf`，再根据 `ctf_start` 返回的 `recommendedTool` 调用具体工具。
