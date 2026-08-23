@@ -26,6 +26,7 @@ export interface CtfPwninitResult extends CtfToolResultBase {
         command: string[];
         selectedLibc: string | null;
         selectedLd: string | null;
+        initializationOnly: boolean;
         beforeSha256: string | null;
         afterSha256: string | null;
         changed: boolean;

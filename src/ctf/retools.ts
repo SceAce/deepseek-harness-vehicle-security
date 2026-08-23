@@ -1,7 +1,7 @@
 import { mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-import { findCtfExecutable } from './environment.js'
+import { findCtfExecutable, findCtfIdaExecutable } from './environment.js'
 import type { ResolvedWorkspaceFile } from '../paths.js'
 import { runCommand, type CommandOptions } from '../process.js'
 import { commandRecord, emptyResult, type CtfToolResultBase } from './types.js'
@@ -84,10 +84,7 @@ async function buildIdaScriptPlanImpl(
   options: CommandOptions,
 ): Promise<IdaScriptPlanResult> {
   const base = emptyResult()
-  const idaExecutable = await findCtfExecutable('idat64', options.cwd)
-    ?? await findCtfExecutable('idat', options.cwd)
-    ?? await findCtfExecutable('ida64', options.cwd)
-    ?? await findCtfExecutable('ida', options.cwd)
+  const idaExecutable = await findCtfIdaExecutable(options.cwd)
   const script = buildIdaScript(file.relativePath, focus)
   const launcher = { executable: idaExecutable ?? 'idat64', argv: ['-A', '-Sanalysis.py', file.path] }
   let analysisOutput: string | null = null

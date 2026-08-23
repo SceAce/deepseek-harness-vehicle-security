@@ -31,6 +31,8 @@ export interface CtfToolAuditResult {
     missing: number;
     capabilities: CtfCapability[];
     python: {
+        policy: 'fixed';
+        requiredExecutable: string;
         executable: string | null;
         source: string | null;
         venv: string | null;

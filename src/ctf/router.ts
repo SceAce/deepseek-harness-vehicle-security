@@ -115,13 +115,13 @@ export function toolGraphForCategory(category: ResolvedCtfCategory): CtfToolGrap
     case 'pwn':
       return {
         category,
-        entry: 'ctf_pwn_profile',
+        entry: 'ctf_pwninit',
         nodes: [
           { tool: 'ctf_start', role: 'route and select the first path', when: 'always for a new challenge' },
           { tool: 'ctf_tool_audit', role: 'discover checksec, GDB, gadget, and pwntools capabilities', when: 'capability state is unknown or stale' },
           { tool: 'ctf_artifact_profile', role: 'anchor file identity and type', when: 'a local binary is present' },
-          { tool: 'ctf_pwn_profile', role: 'collect mitigations, imports, strings, and pwn leads', when: 'the artifact is an executable' },
           { tool: 'ctf_pwninit', role: 'select the challenge loader/libc and create a reproducible patched runtime', when: 'matching ld/libc files, a dependency directory, or a glibc version is available' },
+          { tool: 'ctf_pwn_profile', role: 'collect mitigations, imports, strings, and pwn leads after pwninit initialization', when: 'the artifact is an executable' },
           { tool: 'ctf_pwn_gdb_probe', role: 'collect Pwndbg context, vmmap, registers, and backtrace', when: 'Pwndbg is available or runtime state is needed' },
           { tool: 'mcp.gdb_pwndbg', role: 'dispatch interactive or stateful debugger MCP operations', when: 'GDB/Pwndbg MCP is configured' },
           { tool: 'ctf_pwn_debug_probe', role: 'collect registers, stack, maps, and branch context', when: 'runtime validation is needed' },
@@ -132,8 +132,9 @@ export function toolGraphForCategory(category: ResolvedCtfCategory): CtfToolGrap
         edges: [
           { from: 'ctf_start', to: 'ctf_tool_audit', condition: 'capability inventory is missing' },
           { from: 'ctf_start', to: 'ctf_artifact_profile', condition: 'path is provided' },
-          { from: 'ctf_artifact_profile', to: 'ctf_pwn_profile', condition: 'artifact is an executable' },
-          { from: 'ctf_pwn_profile', to: 'ctf_pwninit', condition: 'the workspace contains or identifies a matching loader/libc source' },
+          { from: 'ctf_start', to: 'ctf_pwninit', condition: 'a Pwn artifact path is available; pwninit is the mandatory first Pwn action' },
+          { from: 'ctf_artifact_profile', to: 'ctf_pwninit', condition: 'artifact is an executable' },
+          { from: 'ctf_pwninit', to: 'ctf_pwn_profile', condition: 'pwninit initialization or runtime preparation completed' },
           { from: 'ctf_pwninit', to: 'ctf_pwn_gdb_probe', condition: 'the binary was patched or the selected runtime was verified' },
           { from: 'ctf_pwn_profile', to: 'ctf_pwn_gdb_probe', condition: 'Pwndbg runtime context is available' },
           { from: 'ctf_pwn_profile', to: 'mcp.gdb_pwndbg', condition: 'GDB/Pwndbg MCP is configured and interactive debugger state is required' },
@@ -241,9 +242,9 @@ function firstTool(
   switch (category) {
     case 'pwn':
       return artifact
-        ? { tool: 'ctf_pwn_profile', args: { path: artifact.path } }
+        ? { tool: 'ctf_pwninit', args: { path: artifact.path, mode: 'prepare' } }
         : input.path
-          ? { tool: 'ctf_artifact_profile', args: { path: input.path } }
+          ? { tool: 'ctf_pwninit', args: { path: input.path, mode: 'prepare' } }
           : { tool: 'ctf_tool_audit', args: {} }
     case 're':
       return artifact
@@ -280,8 +281,8 @@ function choicesForCategory(
   const pathArgs = pathValue ? { path: pathValue } : null
   if (category === 'pwn' && pathArgs) {
     return [
-      choice(audit, 'ctf_pwn_profile', pathArgs, 'Get a static mitigation/import overview first when the binary is not yet understood.'),
-      choice(audit, 'ctf_pwninit', { ...pathArgs, mode: 'prepare' }, 'Use when matching loader/libc files or a known glibc source are present.'),
+      choice(audit, 'ctf_pwninit', { ...pathArgs, mode: 'prepare' }, 'Mandatory first Pwn action: initialize the challenge runtime and switch matching ld/libc when a source is available.'),
+      choice(audit, 'ctf_pwn_profile', pathArgs, 'After pwninit, get a static mitigation/import overview before choosing a deeper evidence path.'),
       choice(audit, 'ctf_re_r2_query', { ...pathArgs, commands: ['aaa', 'ij', 'afl'] }, 'Use when compact headless functions, metadata, or xrefs will answer the next question.'),
       choice(audit, 'ctf_pwn_gdb_probe', { ...pathArgs, breakAt: 'main' }, 'Use when heap/runtime state, mappings, or Pwndbg context matter.'),
       choice(audit, 'ctf_pwn_debug_probe', { ...pathArgs, breakAt: 'main' }, 'Use when generic GDB registers, stack, or a breakpoint are enough.'),

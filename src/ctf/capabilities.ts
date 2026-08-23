@@ -1,4 +1,5 @@
-import { discoverCtfPython, findCtfExecutable } from './environment.js'
+import path from 'node:path'
+import { discoverCtfPython, findCtfExecutable, findCtfIdaExecutable } from './environment.js'
 import { runCommand, type CommandOptions } from '../process.js'
 import { discoverCtfMcpConfiguration } from './mcp.js'
 import { commandRecord, type CtfToolBinding, type ToolInvocationRecord } from './types.js'
@@ -38,6 +39,8 @@ export interface CtfToolAuditResult {
   missing: number
   capabilities: CtfCapability[]
   python: {
+    policy: 'fixed'
+    requiredExecutable: string
     executable: string | null
     source: string | null
     venv: string | null
@@ -165,6 +168,8 @@ export async function auditCtfTools(options: CommandOptions = {}): Promise<CtfTo
     missing: capabilities.filter(item => !item.available).length + python.modules.filter(item => !item.available).length,
     capabilities,
     python: {
+      policy: python.policy,
+      requiredExecutable: python.requiredExecutable,
       executable: python.executable,
       source: python.source,
       venv: python.venv,
@@ -184,6 +189,8 @@ export function hasCapability(audit: CtfToolAuditResult, id: string): boolean {
 }
 
 async function probePython(options: CommandOptions): Promise<{
+  policy: 'fixed'
+  requiredExecutable: string
   executable: string | null
   source: string | null
   venv: string | null
@@ -196,8 +203,10 @@ async function probePython(options: CommandOptions): Promise<{
   const commands: ToolInvocationRecord[] = []
   if (!environment.executable) {
     return {
+      policy: environment.policy,
+      requiredExecutable: environment.requiredExecutable,
       executable: null,
-      source: null,
+      source: environment.source,
       venv: null,
       bin: null,
       version: null,
@@ -235,6 +244,8 @@ async function probePython(options: CommandOptions): Promise<{
   }
 
   return {
+    policy: environment.policy,
+    requiredExecutable: environment.requiredExecutable,
     executable: environment.executable,
     source: environment.source,
     venv: environment.venv,
@@ -276,19 +287,17 @@ async function probePwndbg(options: CommandOptions): Promise<CtfCapability & { c
 }
 
 async function probeIdaCli(): Promise<CtfCapability> {
-  const candidates = ['idat64', 'idat', 'ida64', 'ida']
-  for (const candidate of candidates) {
-    const executable = await findCtfExecutable(candidate)
-    if (!executable) continue
+  const executable = await findCtfIdaExecutable()
+  if (executable) {
     return {
       id: 're.ida_cli',
       category: 're',
-      executable: candidate,
+      executable: path.basename(executable),
       available: true,
       path: executable,
       version: 'CLI detected',
       operations: ['IDAPython script execution', 'batch analysis'],
-      features: ['idapython', 'batch'],
+      features: ['idapython', 'batch', 'absolute-path'],
     }
   }
   return {

@@ -4,6 +4,8 @@ import path from 'node:path'
 import { findExecutable } from '../paths.js'
 
 export interface CtfPythonEnvironment {
+  policy: 'fixed'
+  requiredExecutable: string
   executable: string | null
   source: string | null
   venv: string | null
@@ -11,50 +13,26 @@ export interface CtfPythonEnvironment {
   searchPath: string
 }
 
-const DEFAULT_CTF_PYTHON = '/home/source/tools/PyVenv/CTF/bin/python'
+export const DEFAULT_CTF_PYTHON = '/home/source/tools/PyVenv/CTF/bin/python'
+export const DEFAULT_CTF_IDA_CLI_CANDIDATES = [
+  '/home/source/CTF_PWN/tools/IDA/IDA-Pro-9.3/IDA-9-3/idat64',
+  '/home/source/CTF_PWN/tools/IDA/IDA-Pro-9.3/IDA-9-3/idat',
+  '/home/source/CTF_PWN/tools/IDA/IDA-Pro-9.3/IDA-9-3/ida64',
+  '/home/source/CTF_PWN/tools/IDA/IDA-Pro-9.3/IDA-9-3/ida',
+] as const
 
 export async function discoverCtfPython(cwd = process.cwd()): Promise<CtfPythonEnvironment> {
-  const candidates: Array<{ executable: string; source: string }> = []
-  const configured = process.env.DSH_CTF_PYTHON?.trim()
-  if (configured) {
-    if (path.isAbsolute(configured) || configured.includes(path.sep)) {
-      candidates.push({ executable: configured, source: 'DSH_CTF_PYTHON' })
-    } else {
-      const resolved = await findExecutable(configured)
-      if (resolved) candidates.push({ executable: resolved, source: 'DSH_CTF_PYTHON' })
-    }
-  }
-
-  candidates.push({ executable: DEFAULT_CTF_PYTHON, source: DEFAULT_CTF_PYTHON })
-
-  const virtualEnv = process.env.VIRTUAL_ENV?.trim()
-  if (virtualEnv) {
-    candidates.push({ executable: path.join(virtualEnv, 'bin', 'python'), source: '$VIRTUAL_ENV' })
-    candidates.push({ executable: path.join(virtualEnv, 'bin', 'python3'), source: '$VIRTUAL_ENV' })
-  }
-
-  const workspaceVenv = path.join(cwd, '.venv', 'bin')
-  candidates.push({ executable: path.join(workspaceVenv, 'python'), source: 'workspace/.venv' })
-  candidates.push({ executable: path.join(workspaceVenv, 'python3'), source: 'workspace/.venv' })
-
-  const pathPython = await findExecutable('python3')
-  if (pathPython) candidates.push({ executable: pathPython, source: 'PATH/python3' })
-  const pathPythonLegacy = await findExecutable('python')
-  if (pathPythonLegacy) candidates.push({ executable: pathPythonLegacy, source: 'PATH/python' })
-
-  let selected: { executable: string; source: string } | null = null
-  for (const candidate of deduplicateCandidates(candidates)) {
-    if (await isExecutable(candidate.executable)) {
-      selected = candidate
-      break
-    }
-  }
+  const selected = await isExecutable(DEFAULT_CTF_PYTHON)
+    ? { executable: DEFAULT_CTF_PYTHON, source: 'fixed-default' }
+    : null
 
   const bin = selected ? path.dirname(selected.executable) : null
   const venv = bin && path.basename(bin) === 'bin' ? path.dirname(bin) : null
   return {
+    policy: 'fixed',
+    requiredExecutable: DEFAULT_CTF_PYTHON,
     executable: selected?.executable ?? null,
-    source: selected?.source ?? null,
+    source: selected?.source ?? 'fixed-default (missing)',
     venv,
     bin,
     searchPath: await ctfSearchPath(cwd, bin),
@@ -66,13 +44,27 @@ export async function findCtfExecutable(name: string, cwd = process.cwd()): Prom
   return findExecutable(name, environment.searchPath)
 }
 
+export async function findCtfIdaExecutable(_cwd = process.cwd()): Promise<string | null> {
+  const configured = expandHome(process.env.DSH_CTF_IDA?.trim() ?? '')
+  const candidates = [
+    ...(configured ? [configured] : []),
+    ...DEFAULT_CTF_IDA_CLI_CANDIDATES,
+    'idat64',
+    'idat',
+    'ida64',
+    'ida',
+  ]
+  for (const candidate of deduplicateStrings(candidates)) {
+    const executable = await findExecutable(candidate)
+    if (executable) return executable
+  }
+  return null
+}
+
 export async function ctfSearchPath(cwd = process.cwd(), selectedPythonBin?: string | null): Promise<string> {
   const directories = [
     selectedPythonBin,
-    process.env.DSH_CTF_PYTHON && path.dirname(process.env.DSH_CTF_PYTHON),
     DEFAULT_CTF_PYTHON && path.dirname(DEFAULT_CTF_PYTHON),
-    process.env.VIRTUAL_ENV && path.join(process.env.VIRTUAL_ENV, 'bin'),
-    path.join(cwd, '.venv', 'bin'),
     ...(process.env.PATH ?? '').split(path.delimiter),
   ]
   return [...new Set(directories.filter((item): item is string => Boolean(item && item.trim())))]
@@ -88,13 +80,18 @@ async function isExecutable(candidate: string): Promise<boolean> {
   }
 }
 
-function deduplicateCandidates(
-  candidates: Array<{ executable: string; source: string }>,
-): Array<{ executable: string; source: string }> {
+function expandHome(value: string): string {
+  if (value === '~') return process.env.HOME ?? value
+  if (value.startsWith('~/')) return path.join(process.env.HOME ?? '~', value.slice(2))
+  if (value.startsWith('$HOME/')) return path.join(process.env.HOME ?? '$HOME', value.slice(6))
+  return value
+}
+
+function deduplicateStrings(candidates: readonly string[]): string[] {
   const seen = new Set<string>()
   return candidates.filter(candidate => {
-    if (seen.has(candidate.executable)) return false
-    seen.add(candidate.executable)
+    if (seen.has(candidate)) return false
+    seen.add(candidate)
     return true
   })
 }

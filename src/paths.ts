@@ -40,6 +40,15 @@ export async function findExecutable(
   name: string,
   envPath = process.env.PATH ?? '',
 ): Promise<string | null> {
+  if (path.isAbsolute(name)) {
+    try {
+      await access(name, constants.X_OK)
+      return name
+    } catch {
+      return null
+    }
+  }
+
   for (const directory of envPath.split(path.delimiter).filter(Boolean)) {
     const candidate = path.join(directory, name)
     try {
