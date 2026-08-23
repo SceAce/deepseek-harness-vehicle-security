@@ -61,6 +61,7 @@ export async function debugPwndbgArtifact(file, args, options = {}) {
         ...(Array.isArray(args.argv) && args.argv.length > 0 ? [`set args ${args.argv.slice(0, 16).map(quoteGdbCommandArgument).join(' ')}`] : []),
         ...(args.breakAt ? [`break ${quoteGdbCommandArgument(args.breakAt)}`] : []),
         'starti',
+        'python import pwndbg; print("dsh-pwndbg-loaded")',
         'context',
         'vmmap',
         'info registers',
@@ -75,20 +76,25 @@ export async function debugPwndbgArtifact(file, args, options = {}) {
     base.commands.push(commandRecord(gdb, argv, capture, options.cwd));
     const output = [capture.stdout, capture.stderr].filter(Boolean).join('\n').trim() || null;
     const combinedOutput = output?.toLowerCase() ?? '';
-    if (combinedOutput.includes('pwndbg') || combinedOutput.includes('context')) {
+    const pwndbgLoaded = combinedOutput.includes('dsh-pwndbg-loaded') || combinedOutput.includes('pwndbg');
+    if (pwndbgLoaded) {
         base.observations.push('GDB batch probe executed Pwndbg-oriented context, vmmap, register, and backtrace commands.');
     }
     else {
-        base.limitations.push('GDB ran, but the output does not confirm Pwndbg command output; inspect the raw debugger output.');
+        base.limitations.push('GDB ran, but the explicit Pwndbg import probe did not confirm that Pwndbg is loaded.');
     }
     if (!capture.ok) {
         base.limitations.push(`Pwndbg GDB probe exited with ${capture.exitCode ?? 'no status'}: ${capture.error ?? capture.stderr.trim()}`);
     }
     base.nextActions.push({ tool: 'ctf_pwn_profile', args: { path: file.relativePath }, reason: 'Correlate Pwndbg runtime observations with static mitigations and imports.' });
-    const pwndbgLoaded = combinedOutput.includes('pwndbg');
+    const status = pwndbgLoaded
+        ? 'ok'
+        : capture.ok
+            ? 'missing_capability'
+            : 'failed';
     return {
         ...base,
-        status: capture.ok || pwndbgLoaded ? 'ok' : 'failed',
+        status,
         debugger: { output, frontend: 'pwndbg' },
     };
 }
