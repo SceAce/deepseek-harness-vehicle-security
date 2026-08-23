@@ -5,6 +5,8 @@ description: Tool-first reverse-engineering CTF skill. Use when the challenge is
 
 # Solve CTF RE
 
+除工具名、命令、路径、代码和原始日志外，使用中文交流。所有 Python 命令必须使用 `/home/source/tools/PyVenv/CTF/bin/python`。
+
 1. Call `ctf_tool_audit` when local capability state is unknown or stale. Use `ctf_start` when routing or ranked choices are useful; both are optional when the artifact and backend are already known.
 2. Use `ctf_re_profile` on the highest-value binary or source artifact.
 3. Use `ctf_re_r2_query` for fast headless analysis, JSON metadata, xrefs, and focused disassembly.

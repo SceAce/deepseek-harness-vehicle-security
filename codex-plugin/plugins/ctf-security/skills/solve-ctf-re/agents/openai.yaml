@@ -1,7 +1,7 @@
 interface:
   display_name: "Solve CTF RE"
   short_description: "Tool-first reverse-engineering CTF workflow"
-  default_prompt: "Use $solve-ctf-re. Inspect ctf_tool_audit/toolBindings when capability state is unknown, then choose ctf_re_profile, ctf_re_r2_query, mcp.ida_pro, or ctf_re_ida_script according to the evidence question. Treat nextActions and the tool graph as recommendations, not a fixed order."
+  default_prompt: "使用 $solve-ctf-re。除工具名、命令、路径、代码和原始日志外使用中文。能力未知时检查 ctf_tool_audit/toolBindings，再根据证据问题选择 ctf_re_profile、ctf_re_r2_query、mcp.ida_pro 或 ctf_re_ida_script。所有 Python 命令必须使用 /home/source/tools/PyVenv/CTF/bin/python。"
 
 dependencies:
   tools:

@@ -200,17 +200,21 @@ CTF 插件只调用本机已安装程序、生成确定性脚本、检查外部 
 - `toolBindings`：每个 CTF 工具使用的本地后端、当前可用能力、缺失能力、示例参数和 fallback；
 - `recommendations`：缺少能力时应调用的工具或 setup 请求。
 
-Python 工具优先使用：
+CTF 工具的 Python 解释器固定为：
 
 ```text
 /home/source/tools/PyVenv/CTF/bin/python
-DSH_CTF_PYTHON
-$VIRTUAL_ENV/bin/python
-<workspace>/.venv/bin/python
-PATH 中的 python3/python
 ```
 
-因此在 CTF Python 环境中安装的新库会自动进入工具审计和命令搜索路径。当前环境已经检测到 pwntools、Z3、SymPy、PyCryptodome、gmpy2、requests、Pillow、Unicorn、Capstone、LIEF 和 BeautifulSoup；缺失的 Scapy、angr、Playwright 等会以推荐项显示。
+`ctf_tool_audit.python` 会返回 `policy: fixed`、`requiredExecutable` 和实际 `executable`。固定解释器不存在时，Python 模块全部报告为缺失，工具层不会回退到 `python`、`python3`、`$VIRTUAL_ENV` 或工作区虚拟环境。安装库时直接使用：
+
+```bash
+/home/source/tools/PyVenv/CTF/bin/python -m pip install PACKAGE
+```
+
+当前环境已经检测到 pwntools、Z3、SymPy、PyCryptodome、gmpy2、requests、Pillow、Unicorn、Capstone、LIEF 和 BeautifulSoup；缺失的 Scapy、angr、Playwright 等会以推荐项显示。
+
+除工具名、命令、路径、代码和原始日志外，CTF Skill 要求模型使用中文交流。
 
 需要人操作安装、启动长驻服务或编辑 MCP 客户端配置时，调用 `ctf_tool_setup`。每个 setup 请求都有严格的操作顺序；人类侧只返回 `log`、`screenshot` 或 `ocr_text`。
 
@@ -252,7 +256,14 @@ export DSH_CTF_MCP_CONFIG="$PWD/ctf-mcp.json"
 - 配置文件默认写入 `~/.config/dsh/ctf-mcp.json`，也可以通过 `DSH_CTF_MCP_CONFIG` 或 `configPath` 指定；
 - 仓库内置的 `.mcp.json` 只启动 CTF 自身的本地 MCP，不会把外部 server 与车联网插件混在一起。
 
-模型的工具策略是：能力或类别未知时调用 `ctf_tool_audit`/`ctf_start` 获取绑定和选择；目标与后端明确时可以直接调用具体工具。模型根据证据问题自行决定是否使用 r2、IDA、GDB/Pwndbg、pwninit 或 ROP 工具，不要求每道题执行全部工具。IDA MCP 已配置时不要求安装 IDA CLI；`ctf_re_ida_script` 仍然负责生成 IDAPython，CLI 仅用于需要 batch 执行的场景。Web 交互优先使用 `mcp-chrome`，无 MCP 时才回退到本机 Chromium/Chrome headless；CVE、漏洞版本和依赖资料优先使用 Tavily MCP。
+模型的工具策略是：能力或类别未知时调用 `ctf_tool_audit`/`ctf_start` 获取绑定和选择；目标与后端明确时可以直接调用具体工具。Pwn 二进制有一个固定首步：模型必须先调用 `ctf_pwninit(mode="prepare")`，它会先执行本地初始化；发现匹配的 `ld`/`libc` 时继续切换运行时，没有匹配源时自动使用 `--only-init`，然后再进入 `ctf_pwn_profile` 和后续工具选择。完成该首步后，模型仍根据证据问题自行决定是否使用 r2、IDA、GDB/Pwndbg 或 ROP，不要求每道题执行全部工具。IDA MCP 已配置时优先使用 MCP；未配置时，插件也会检测本机 IDA CLI。当前机器的默认 CLI 候选包括：
+
+```text
+/home/source/CTF_PWN/tools/IDA/IDA-Pro-9.3/IDA-9-3/idat
+/home/source/CTF_PWN/tools/IDA/IDA-Pro-9.3/IDA-9-3/ida
+```
+
+也可以通过 `DSH_CTF_IDA` 指定一个绝对路径、`~` 路径或 `$HOME/...` 路径。`ctf_re_ida_script` 负责生成 IDAPython，`execute=true` 时使用审计发现的实际 CLI。Web 交互优先使用 `mcp-chrome`，无 MCP 时才回退到本机 Chromium/Chrome headless；CVE、漏洞版本和依赖资料优先使用 Tavily MCP。
 
 ### 推荐工具分工
 
@@ -316,8 +327,8 @@ npx @deepseek-ai/dsh@next web
 ```text
 先用 ctf_start 分析 chall，类别自动判断。
 使用 ctf_tool_audit 检查本机 CTF 工具。
-对 chall 做 ctf_pwn_profile，根据漏洞假设从 nextActions/toolChoices 中选择 GDB/Pwndbg、r2、pwninit 或 ROP 工具。
-如果工作区同时有 `ld-*.so*` 和 `libc-*.so*`，先对 chall 调用 `ctf_pwninit`，再重新调用 `ctf_pwn_gdb_probe` 验证目标 glibc 已加载。
+对 chall 先调用 `ctf_pwninit`，再根据漏洞假设从 nextActions/toolChoices 中选择 `ctf_pwn_profile`、GDB/Pwndbg、r2 或 ROP 工具。
+如果工作区同时有 `ld-*.so*` 和 `libc-*.so*`，`ctf_pwninit` 会先切换运行时，再调用 `ctf_pwn_gdb_probe` 验证目标 glibc 已加载。
 对 cipher.txt 做 ctf_crypto_probe，先不要写脚本。
 对 capture.pcapng 做 ctf_pcap_profile。
 对 http://127.0.0.1:8080/ 做 ctf_http_request，并用 ctf_http_diff 对比参数变化。

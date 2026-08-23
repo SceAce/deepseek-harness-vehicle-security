@@ -120,7 +120,7 @@ export function toolGraphForCategory(category: ResolvedCtfCategory): CtfToolGrap
           { tool: 'ctf_start', role: 'route and select the first path', when: 'always for a new challenge' },
           { tool: 'ctf_tool_audit', role: 'discover checksec, GDB, gadget, and pwntools capabilities', when: 'capability state is unknown or stale' },
           { tool: 'ctf_artifact_profile', role: 'anchor file identity and type', when: 'a local binary is present' },
-          { tool: 'ctf_pwninit', role: 'select the challenge loader/libc and create a reproducible patched runtime', when: 'matching ld/libc files, a dependency directory, or a glibc version is available' },
+          { tool: 'ctf_pwninit', role: 'initialize the Pwn workspace and select the challenge loader/libc when available', when: 'always before other Pwn analysis actions' },
           { tool: 'ctf_pwn_profile', role: 'collect mitigations, imports, strings, and pwn leads after pwninit initialization', when: 'the artifact is an executable' },
           { tool: 'ctf_pwn_gdb_probe', role: 'collect Pwndbg context, vmmap, registers, and backtrace', when: 'Pwndbg is available or runtime state is needed' },
           { tool: 'mcp.gdb_pwndbg', role: 'dispatch interactive or stateful debugger MCP operations', when: 'GDB/Pwndbg MCP is configured' },

@@ -5,9 +5,11 @@ description: Tool-first pwn skill for binaries, heap, stack, ROP, and debugger-d
 
 # Solve CTF Pwn
 
+除工具名、命令、路径、代码和原始日志外，使用中文交流。
+
 1. Call `ctf_tool_audit` when local capability state is unknown or stale. Use `ctf_start` when category routing or ranked choices are useful; both are optional when the target and backend are already known.
-2. Use `ctf_pwn_profile` to collect mitigation state, imports, and strings.
-3. Choose `ctf_pwninit` when matching libc/ld files, a `libs` directory, or a known glibc source exists. Use the deterministic non-interactive path; it does not enter the wizard.
+2. For every Pwn binary, call `ctf_pwninit` first with `mode: "prepare"`. It performs the local initialization and switches matching `ld`/`libc` when available; without a runtime source it automatically runs the non-interactive `--only-init` path.
+3. After `ctf_pwninit`, use `ctf_pwn_profile` to collect mitigation state, imports, and strings.
 4. Choose `mcp.gdb_pwndbg` for configured interactive debugger state, or `ctf_pwn_gdb_probe` for bounded local Pwndbg context.
 5. Choose `ctf_pwn_debug_probe` for generic GDB registers, stack, breakpoints, or bounded custom commands.
 6. Choose `ctf_re_r2_query` for headless functions, xrefs, metadata, or focused disassembly.
@@ -19,8 +21,7 @@ description: Tool-first pwn skill for binaries, heap, stack, ROP, and debugger-d
 ## Tool Graph
 
 ```text
-binary -> ctf_artifact_profile -> ctf_pwn_profile
-runtime selection -> ctf_pwninit
+binary -> ctf_artifact_profile -> ctf_pwninit -> ctf_pwn_profile
 runtime state -> mcp.gdb_pwndbg or ctf_pwn_gdb_probe or ctf_pwn_debug_probe
 headless RE -> ctf_re_r2_query
 gadget search -> ctf_rop_search
@@ -33,7 +34,8 @@ prompt-only -> ctf_start -> ctf_tool_audit -> ctf_pwn_profile
 ## Notes
 
 - Prefer installed tooling like `checksec`, `gdb`, `ROPgadget`, `ropper`, and `pwntools`.
-- Prefer `ctf_pwninit` for local loader/libc selection. It auto-detects sibling `ld-*` and `libc-*` files and uses pwninit backups before patching.
+- `ctf_pwninit` is mandatory before other Pwn analysis actions. It auto-detects sibling `ld-*` and `libc-*` files, runs initialization when no pair exists, and uses pwninit backups before patching.
 - After `ctf_pwninit`, rerun a debugger probe only when runtime evidence is needed; use the patched binary so the observed loader and libc match the challenge files.
+- Every Python command must use `/home/source/tools/PyVenv/CTF/bin/python`.
 - Record exact argv, breakpoint names, register dumps, and observed transitions.
 - Use scripts only after the debugger or gadget tools leave a real gap.

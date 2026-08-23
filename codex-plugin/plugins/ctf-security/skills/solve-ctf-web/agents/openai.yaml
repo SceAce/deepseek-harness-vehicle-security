@@ -1,7 +1,7 @@
 interface:
   display_name: "Solve CTF Web"
   short_description: "Tool-first web challenge workflow"
-  default_prompt: "Use $solve-ctf-web. Inspect ctf_tool_audit/toolBindings when capability state is unknown, then choose ctf_http_request, ctf_http_diff, mcp.chrome, ctf_web_browser_probe, or ctf_web_capture_probe according to the evidence question. Do not assume a fixed tool order."
+  default_prompt: "使用 $solve-ctf-web。除工具名、命令、路径、代码和原始日志外使用中文。能力未知时检查 ctf_tool_audit/toolBindings，再根据证据问题选择 ctf_http_request、ctf_http_diff、mcp.chrome、ctf_web_browser_probe 或 ctf_web_capture_probe。所有 Python 命令必须使用 /home/source/tools/PyVenv/CTF/bin/python。"
 
 dependencies:
   tools:

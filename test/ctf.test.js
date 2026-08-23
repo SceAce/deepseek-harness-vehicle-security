@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { copyFile, mkdtemp, writeFile } from 'node:fs/promises'
+import { chmod, copyFile, mkdtemp, writeFile } from 'node:fs/promises'
 import { createServer } from 'node:http'
 import { once } from 'node:events'
 import os from 'node:os'
@@ -11,6 +11,7 @@ import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
 import * as ctfPlugin from '../lib/ctf/index.js'
 import * as ctfSkillPlugin from '../lib/ctf/skills.js'
+import { DEFAULT_CTF_PYTHON, discoverCtfPython, findCtfIdaExecutable } from '../lib/ctf/environment.js'
 
 const config = {
   workspaceRoot: '.',
@@ -82,7 +83,7 @@ test('CTF tools resolve paths from the active session workspace', async t => {
   assert.match(result.artifact.sha256, /^[0-9a-f]{64}$/)
 })
 
-test('ctf_start routes an ELF artifact to pwn profile first', async t => {
+test('ctf_start routes an ELF artifact to pwninit first', async t => {
   const workspace = await mkdtemp(path.join(os.tmpdir(), 'dsh-ctf-elf-'))
   t.after(() => import('node:fs/promises').then(fs => fs.rm(workspace, { recursive: true, force: true })))
   await copyFile('/bin/true', path.join(workspace, 'chall'))
@@ -102,14 +103,51 @@ test('ctf_start routes an ELF artifact to pwn profile first', async t => {
   )
 
   assert.equal(result.category, 'pwn')
-  assert.equal(result.recommendedTool, 'ctf_pwn_profile')
-  assert.deepEqual(result.recommendedArgs, { path: 'chall' })
+  assert.equal(result.recommendedTool, 'ctf_pwninit')
+  assert.deepEqual(result.recommendedArgs, { path: 'chall', mode: 'prepare' })
   assert.ok(Array.isArray(result.toolChoices))
-  assert.equal(result.toolChoices[0].tool, 'ctf_pwn_profile')
+  assert.equal(result.toolChoices[0].tool, 'ctf_pwninit')
   assert.ok(result.toolChoices.some(choice => choice.tool === 'ctf_pwn_gdb_probe'))
   assert.ok(result.toolChoices.some(choice => choice.tool === 'ctf_re_r2_query'))
-  assert.equal(result.toolGraph.entry, 'ctf_pwn_profile')
+  assert.equal(result.toolGraph.entry, 'ctf_pwninit')
   assert.ok(result.toolGraph.edges.some(edge => edge.to === 'ctf_pwn_debug_probe'))
+})
+
+test('uses the fixed CTF Python interpreter without environment fallbacks', async () => {
+  const previous = {
+    python: process.env.DSH_CTF_PYTHON,
+    virtualEnv: process.env.VIRTUAL_ENV,
+  }
+  process.env.DSH_CTF_PYTHON = '/usr/bin/python3'
+  process.env.VIRTUAL_ENV = '/tmp/not-the-ctf-venv'
+  try {
+    const environment = await discoverCtfPython()
+    assert.equal(environment.policy, 'fixed')
+    assert.equal(environment.requiredExecutable, DEFAULT_CTF_PYTHON)
+    assert.equal(environment.executable, DEFAULT_CTF_PYTHON)
+    assert.equal(environment.source, 'fixed-default')
+  } finally {
+    if (previous.python === undefined) delete process.env.DSH_CTF_PYTHON
+    else process.env.DSH_CTF_PYTHON = previous.python
+    if (previous.virtualEnv === undefined) delete process.env.VIRTUAL_ENV
+    else process.env.VIRTUAL_ENV = previous.virtualEnv
+  }
+})
+
+test('detects an IDA CLI absolute path supplied through DSH_CTF_IDA', async t => {
+  const workspace = await mkdtemp(path.join(os.tmpdir(), 'dsh-ctf-ida-'))
+  t.after(() => import('node:fs/promises').then(fs => fs.rm(workspace, { recursive: true, force: true })))
+  const ida = path.join(workspace, 'ida')
+  await writeFile(ida, '#!/bin/sh\nexit 0\n')
+  await chmod(ida, 0o755)
+  const previous = process.env.DSH_CTF_IDA
+  process.env.DSH_CTF_IDA = ida
+  try {
+    assert.equal(await findCtfIdaExecutable(), ida)
+  } finally {
+    if (previous === undefined) delete process.env.DSH_CTF_IDA
+    else process.env.DSH_CTF_IDA = previous
+  }
 })
 
 test('ctf_re_profile returns structured facts for an ELF artifact', async t => {
@@ -192,6 +230,36 @@ test('ctf_pwninit exposes deterministic runtime and backup operations', async t 
   assert.equal(result.pwninit.mode, 'list_backups')
   assert.equal(result.pwninit.binary, 'chall')
   assert.ok(result.commands.some(command => command.argv.includes('--list-backups')))
+})
+
+test('ctf_pwninit runs the initialization-only path when no libc source exists', async t => {
+  const workspace = await mkdtemp(path.join(os.tmpdir(), 'dsh-ctf-pwninit-init-'))
+  t.after(() => import('node:fs/promises').then(fs => fs.rm(workspace, { recursive: true, force: true })))
+  await copyFile('/bin/true', path.join(workspace, 'chall'))
+
+  const registered = []
+  ctfPlugin.apply({ tools: { register: tool => registered.push(tool) } }, {
+    ...config,
+    workspaceRoot: undefined,
+    commandTimeoutMs: 5000,
+  })
+  const pwninit = registered.find(item => item.name === 'ctf_pwninit')
+  const result = await pwninit.execute(
+    { path: 'chall', mode: 'prepare' },
+    {
+      signal: new AbortController().signal,
+      agent: { session: { header: { cwd: workspace } } },
+    },
+  )
+
+  if (result.status === 'missing_capability') {
+    t.skip('pwninit is not installed in this test environment')
+    return
+  }
+  assert.equal(result.status, 'ok')
+  assert.equal(result.pwninit.initializationOnly, true)
+  assert.ok(result.pwninit.command.includes('--only-init'))
+  assert.equal(result.nextActions[0].tool, 'ctf_pwn_profile')
 })
 
 test('ctf_pwninit stays lossless through the real DSH tool runtime', async t => {

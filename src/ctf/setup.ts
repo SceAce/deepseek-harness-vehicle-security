@@ -193,14 +193,14 @@ function buildSetupRequest(target: CtfSetupTarget, context?: string): CtfHumanRe
             order: 1,
             kind: 'command',
             title: 'Verify the selected interpreter',
-            command: 'source /home/source/tools/PyVenv/CTF/bin/activate && python --version && python -m pip --version',
+            command: '/home/source/tools/PyVenv/CTF/bin/python --version && /home/source/tools/PyVenv/CTF/bin/python -m pip --version',
             expectedSignal: 'Return the Python and pip version output.',
           },
           {
             order: 2,
             kind: 'command',
             title: 'Verify core CTF modules',
-            command: 'source /home/source/tools/PyVenv/CTF/bin/activate && python -c \'import pwn, z3, sympy, Crypto, gmpy2, requests, PIL, unicorn, capstone, lief, bs4; print("ctf-modules-ok")\'',
+            command: '/home/source/tools/PyVenv/CTF/bin/python -c \'import pwn, z3, sympy, Crypto, gmpy2, requests, PIL, unicorn, capstone, lief, bs4; print("ctf-modules-ok")\'',
             expectedSignal: 'Return ctf-modules-ok or the first missing import.',
           },
           {

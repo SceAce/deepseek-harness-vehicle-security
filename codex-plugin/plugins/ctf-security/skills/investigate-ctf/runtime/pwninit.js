@@ -12,6 +12,7 @@ export async function runPwninit(file, args = {}, options = {}) {
     const beforeSha256 = await hashFile(file.path);
     const executable = await findCtfExecutable('pwninit', options.cwd);
     const selected = await resolveRuntimeSources(file, args, options.maxFileBytes ?? 128 * 1024 * 1024);
+    const initializationOnly = mode === 'prepare' && !args.onlyInit && !selected.source;
     const pwninit = {
         mode,
         executable,
@@ -19,6 +20,7 @@ export async function runPwninit(file, args = {}, options = {}) {
         command: [],
         selectedLibc: selected.libc ? relativePath(file.root, selected.libc) : null,
         selectedLd: selected.ld ? relativePath(file.root, selected.ld) : null,
+        initializationOnly,
         beforeSha256,
         afterSha256: beforeSha256,
         changed: false,
@@ -29,21 +31,8 @@ export async function runPwninit(file, args = {}, options = {}) {
         base.nextActions.push({ tool: 'ctf_tool_audit', args: {}, reason: 'Refresh the local Pwn capability inventory.' });
         return { ...base, pwninit };
     }
-    if (mode === 'prepare' && !args.onlyInit && !selected.source) {
-        base.status = 'missing_capability';
-        base.limitations.push('No libc source was selected. Provide libcPath, ldPath plus libcPath, dependencyDir, or a local libc/ld pair.');
-        base.nextActions.push({
-            tool: 'ctf_human_request',
-            args: {
-                type: 'provide_data',
-                title: 'Provide the matching glibc files',
-                reason: 'pwninit needs a deterministic libc source before patching the challenge binary.',
-            },
-            reason: 'Return the local libc/ld paths or place them in the challenge workspace.',
-        });
-        return { ...base, pwninit };
-    }
-    const argv = buildPwninitArgs(mode, file.path, selected, args);
+    const effectiveArgs = initializationOnly ? { ...args, onlyInit: true } : args;
+    const argv = buildPwninitArgs(mode, file.path, selected, effectiveArgs);
     pwninit.command = [executable, ...argv];
     const capture = await runCommand(executable, argv, {
         ...options,
@@ -52,6 +41,10 @@ export async function runPwninit(file, args = {}, options = {}) {
     });
     base.commands.push(commandRecord(executable, argv, capture, file.root));
     base.observations.push(`pwninit mode=${mode} binary=${file.relativePath}`);
+    if (initializationOnly) {
+        base.observations.push('No matching libc/ld source was found; pwninit ran its non-interactive initialization step first.');
+        base.limitations.push('No libc source was selected, so the binary was initialized but not patched. Provide libcPath, ldPath, dependencyDir, or libcVersion for runtime switching.');
+    }
     if (selected.libc)
         base.observations.push(`selected libc=${relativePath(file.root, selected.libc)}`);
     if (selected.ld)
@@ -81,15 +74,24 @@ export async function runPwninit(file, args = {}, options = {}) {
     });
     if (mode === 'prepare' && capture.ok) {
         base.nextActions.push({
-            tool: 'ctf_pwn_gdb_probe',
+            tool: 'ctf_pwn_profile',
             args: { path: file.relativePath },
-            reason: 'Probe the challenge again after pwninit selected the intended loader and libc.',
+            reason: initializationOnly
+                ? 'Profile the initialized binary while the matching libc/ld source is still unresolved.'
+                : 'Re-profile the binary after pwninit selected the intended loader and libc.',
         });
-        base.nextActions.push({
-            tool: 'ctf_pwn_debug_probe',
-            args: { path: file.relativePath, breakAt: 'main' },
-            reason: 'Inspect main and input handling under the patched runtime.',
-        });
+        if (!initializationOnly) {
+            base.nextActions.push({
+                tool: 'ctf_pwn_gdb_probe',
+                args: { path: file.relativePath },
+                reason: 'Probe the challenge again after pwninit selected the intended loader and libc.',
+            });
+            base.nextActions.push({
+                tool: 'ctf_pwn_debug_probe',
+                args: { path: file.relativePath, breakAt: 'main' },
+                reason: 'Inspect main and input handling under the patched runtime.',
+            });
+        }
     }
     else if (mode === 'restore' && capture.ok) {
         base.nextActions.push({

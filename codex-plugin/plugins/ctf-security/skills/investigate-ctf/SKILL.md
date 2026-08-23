@@ -7,13 +7,20 @@ description: Tool-first CTF investigation for RE, pwn, crypto, misc, and web cha
 
 Use the tool layer before writing a solver. When the local capability state or artifact category is unknown, call `ctf_tool_audit` and/or `ctf_start`; when the target and required backend are already known, call the relevant category tool directly. For focused work, switch to `$solve-ctf-re`, `$solve-ctf-pwn`, or `$solve-ctf-web`.
 
+## Language and Pwn startup rules
+
+- 除工具名、命令、路径、代码、协议字段和原始日志外，模型必须使用中文交流。
+- 对 Pwn 二进制，`ctf_pwninit` 是第一项模型可见的 Pwn 动作。调用 `ctf_start` 后，按其返回的 `recommendedTool` 和 `toolChoices[0]` 调用 `ctf_pwninit`；不要先调用 `ctf_pwn_profile`、GDB、r2 或自写 Python。
+- `ctf_pwninit` 没有匹配的 `ld`/`libc` 时会自动执行 `--only-init`，随后再进入画像和运行时选择；这不是跳过该首步的理由。
+- 所有 Python 命令、脚本执行和模块检查必须使用 `/home/source/tools/PyVenv/CTF/bin/python`，不得回退到 `python`、`python3`、`$VIRTUAL_ENV` 或工作区虚拟环境。
+
 ## Core Rule
 
 1. Use `ctf_tool_audit` when capability state is unknown or stale; it reports callable local tool bindings, backend dependencies, paths, and example arguments.
 2. Use the reported Python interpreter, venv, executable paths, and MCP state as the capability inventory.
 3. Use `ctf_start` when routing or a ranked set of tool choices is useful; pass the known `path`, `url`, `category`, `objective`, and `context`.
 4. Choose among `toolChoices`, `recommendedTool`, `nextActions`, and the tool graph according to the evidence question. These are recommendations, not a fixed execution order.
-5. Prefer `/home/source/tools/PyVenv/CTF/bin/python` and its installed modules for Python actions.
+5. Use `/home/source/tools/PyVenv/CTF/bin/python` and its installed modules for every Python action.
 6. Prefer `mcp.ida_pro` for IDA database/decompiler operations, `mcp.chrome` for interactive browser state, and `mcp.tavily` for CVE/version/reference lookup when configured.
 7. If a tool returns `humanRequired`, present the request as a structured action with its exact ordered operations and wait for only `log`, `screenshot`, or `ocr_text`.
 8. If `TAVILY_API_KEY` is the only missing value, call `ctf_mcp_configure`; do not ask the user to hand-write JSON or paths.

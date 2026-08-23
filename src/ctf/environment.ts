@@ -44,8 +44,9 @@ export async function findCtfExecutable(name: string, cwd = process.cwd()): Prom
   return findExecutable(name, environment.searchPath)
 }
 
-export async function findCtfIdaExecutable(_cwd = process.cwd()): Promise<string | null> {
+export async function findCtfIdaExecutable(cwd = process.cwd()): Promise<string | null> {
   const configured = expandHome(process.env.DSH_CTF_IDA?.trim() ?? '')
+  const searchPath = await ctfSearchPath(cwd)
   const candidates = [
     ...(configured ? [configured] : []),
     ...DEFAULT_CTF_IDA_CLI_CANDIDATES,
@@ -55,7 +56,7 @@ export async function findCtfIdaExecutable(_cwd = process.cwd()): Promise<string
     'ida',
   ]
   for (const candidate of deduplicateStrings(candidates)) {
-    const executable = await findExecutable(candidate)
+    const executable = await findExecutable(candidate, searchPath)
     if (executable) return executable
   }
   return null

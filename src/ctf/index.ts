@@ -186,7 +186,7 @@ export function apply(ctx: Context, config: Config): void {
 
   ctx.tools.register(defineTool({
     name: 'ctf_pwn_profile',
-    description: 'Static Pwn profile. Returns mitigation, import, string, and next-action evidence. Choose independently between pwninit for matching libc/ld, r2 for headless RE, Pwndbg/GDB for runtime state, and ROP search for gadget questions.',
+    description: 'Static Pwn profile after the mandatory ctf_pwninit first step. Returns mitigation, import, string, and next-action evidence; choose deeper tools according to the evidence question.',
     parameters: {
       path: { type: 'string', required: true, description: 'Binary path relative to the active workspace' },
     },
@@ -303,7 +303,7 @@ export function apply(ctx: Context, config: Config): void {
 
   ctx.tools.register(defineTool({
     name: 'ctf_re_ida_script',
-    description: 'Generate focused IDAPython for functions, strings, and xrefs. Use with the configured IDA MCP/UI; optional IDA CLI batch execution is only a fallback and is disabled by default.',
+    description: 'Generate focused IDAPython for functions, strings, and xrefs. Use the configured IDA MCP/UI or the detected local IDA CLI path; optional batch execution is disabled by default.',
     parameters: {
       path: { type: 'string', required: true, description: 'Artifact path relative to the active workspace' },
       focus: { type: 'string', description: 'Optional terms used to filter strings and guide the generated script' },

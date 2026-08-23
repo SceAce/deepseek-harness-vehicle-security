@@ -5,6 +5,8 @@ description: Tool-first web CTF skill for baseline requests, response diffs, and
 
 # Solve CTF Web
 
+除工具名、命令、路径、代码和原始日志外，使用中文交流。涉及 Python 时必须使用 `/home/source/tools/PyVenv/CTF/bin/python`。
+
 1. Call `ctf_tool_audit` when local capability state is unknown or stale. Use `ctf_start` when routing or ranked choices are useful; direct HTTP/browser tools remain callable when the endpoint and backend are already known.
 2. Use `ctf_http_request` for the baseline request and response capture.
 3. Use `ctf_http_diff` for one controlled variation at a time.

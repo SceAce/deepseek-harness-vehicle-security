@@ -89,5 +89,6 @@ function looksLikeCommand(step: string): boolean {
   return [
     'cd ', 'npm ', 'pnpm ', 'python ', 'python3 ', 'node ', 'docker ', 'make ', 'cargo ', 'go ',
     'curl ', 'nc ', 'ncat ', 'socat ', 'java ', 'bash ', 'sh ', 'python -c', 'python3 -c',
+    '/home/source/tools/PyVenv/CTF/bin/python ',
   ].some(prefix => normalized.startsWith(prefix)) || /^[A-Z_]+=/.test(normalized)
 }

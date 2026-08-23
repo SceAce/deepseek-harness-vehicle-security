@@ -106,7 +106,7 @@ const tools = [
   },
   {
     name: 'ctf_pwn_profile',
-    description: 'Collect a compact Pwn overview. Choose independently between pwninit, radare2, Pwndbg/GDB, and gadget search based on the next evidence question.',
+    description: 'Collect a compact Pwn overview after the mandatory ctf_pwninit first step. Choose radare2, Pwndbg/GDB, and gadget search based on the next evidence question.',
     inputSchema: {
       type: 'object',
       properties: { ...workspaceProperties, path: { type: 'string' } },
