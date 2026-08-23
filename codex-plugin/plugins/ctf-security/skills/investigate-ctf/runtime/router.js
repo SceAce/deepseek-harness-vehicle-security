@@ -1,4 +1,5 @@
 import { hasCapability } from './capabilities.js';
+import { makeHumanRequest } from './human.js';
 const CATEGORY_KEYWORDS = {
     re: /\bre\b|reverse|reversing|逆向|反编译|算法|serial|license|crackme|keygen|vm|obfusc/i,
     pwn: /\bpwn\b|overflow|rop|ret2|heap|libc|canary|format string|shellcode|栈|堆|溢出/i,
@@ -19,9 +20,95 @@ export function routeCtfStart(input, artifact, audit) {
         reasons,
         recommendedTool: tool,
         recommendedArgs: args,
+        toolGraph: toolGraphForCategory(category),
         nextActions,
         humanRequired,
     };
+}
+export function toolGraphForCategory(category) {
+    switch (category) {
+        case 're':
+            return {
+                category,
+                entry: 'ctf_re_profile',
+                nodes: [
+                    { tool: 'ctf_start', role: 'route and select the first path', when: 'always for a new challenge' },
+                    { tool: 'ctf_tool_audit', role: 'discover installed RE/runtime capabilities', when: 'capability state is unknown or stale' },
+                    { tool: 'ctf_artifact_profile', role: 'anchor file identity and type', when: 'a local artifact is present' },
+                    { tool: 'ctf_re_profile', role: 'collect imports, strings, format, and static leads', when: 'the artifact is executable or source-like' },
+                    { tool: 'ctf_pwn_debug_probe', role: 'observe runtime branches, registers, and memory', when: 'static evidence needs runtime confirmation' },
+                    { tool: 'ctf_rop_search', role: 'search gadgets', when: 'gadget-based control flow is plausible' },
+                    { tool: 'ctf_crypto_probe', role: 'probe encodings and constants', when: 'strings or constants suggest an encoding/crypto path' },
+                    { tool: 'ctf_human_request', role: 'handoff a required environment action', when: 'a person must operate a GUI, device, or service' },
+                ],
+                edges: [
+                    { from: 'ctf_start', to: 'ctf_tool_audit', condition: 'capability inventory is missing' },
+                    { from: 'ctf_start', to: 'ctf_artifact_profile', condition: 'path is provided' },
+                    { from: 'ctf_artifact_profile', to: 'ctf_re_profile', condition: 'artifact is executable or source-like' },
+                    { from: 'ctf_re_profile', to: 'ctf_pwn_debug_probe', condition: 'runtime behavior must confirm a static hypothesis' },
+                    { from: 'ctf_re_profile', to: 'ctf_rop_search', condition: 'gadget search is relevant' },
+                    { from: 'ctf_re_profile', to: 'ctf_crypto_probe', condition: 'encoded constants or crypto indicators are present' },
+                    { from: 'ctf_re_profile', to: 'ctf_human_request', condition: 'required runtime environment is human-operated' },
+                ],
+            };
+        case 'pwn':
+            return {
+                category,
+                entry: 'ctf_pwn_profile',
+                nodes: [
+                    { tool: 'ctf_start', role: 'route and select the first path', when: 'always for a new challenge' },
+                    { tool: 'ctf_tool_audit', role: 'discover checksec, GDB, gadget, and pwntools capabilities', when: 'capability state is unknown or stale' },
+                    { tool: 'ctf_artifact_profile', role: 'anchor file identity and type', when: 'a local binary is present' },
+                    { tool: 'ctf_pwn_profile', role: 'collect mitigations, imports, strings, and pwn leads', when: 'the artifact is an executable' },
+                    { tool: 'ctf_pwn_debug_probe', role: 'collect registers, stack, maps, and branch context', when: 'runtime validation is needed' },
+                    { tool: 'ctf_rop_search', role: 'enumerate ROP gadgets', when: 'ROP is plausible or NX is enabled' },
+                    { tool: 'ctf_human_request', role: 'handoff service/device/GUI operation', when: 'the process or target must be started by a person' },
+                ],
+                edges: [
+                    { from: 'ctf_start', to: 'ctf_tool_audit', condition: 'capability inventory is missing' },
+                    { from: 'ctf_start', to: 'ctf_artifact_profile', condition: 'path is provided' },
+                    { from: 'ctf_artifact_profile', to: 'ctf_pwn_profile', condition: 'artifact is an executable' },
+                    { from: 'ctf_pwn_profile', to: 'ctf_pwn_debug_probe', condition: 'input reachability or runtime state is unknown' },
+                    { from: 'ctf_pwn_profile', to: 'ctf_rop_search', condition: 'gadget-based control flow is relevant' },
+                    { from: 'ctf_pwn_profile', to: 'ctf_human_request', condition: 'target service or device is not available to tools' },
+                ],
+            };
+        case 'web':
+            return {
+                category,
+                entry: 'ctf_http_request',
+                nodes: [
+                    { tool: 'ctf_start', role: 'route the challenge and detect endpoint gaps', when: 'always for a new challenge' },
+                    { tool: 'ctf_tool_audit', role: 'discover curl/browser/http client capabilities', when: 'capability state is unknown or stale' },
+                    { tool: 'ctf_http_request', role: 'capture a baseline response', when: 'a URL is available' },
+                    { tool: 'ctf_http_diff', role: 'compare one controlled request variation', when: 'a baseline response exists' },
+                    { tool: 'ctf_human_request', role: 'handoff service/browser/GUI operation', when: 'no endpoint or human-only interaction is available' },
+                ],
+                edges: [
+                    { from: 'ctf_start', to: 'ctf_tool_audit', condition: 'capability inventory is missing' },
+                    { from: 'ctf_start', to: 'ctf_http_request', condition: 'URL is provided' },
+                    { from: 'ctf_start', to: 'ctf_human_request', condition: 'service endpoint is missing' },
+                    { from: 'ctf_http_request', to: 'ctf_http_diff', condition: 'a controlled parameter or endpoint variation is ready' },
+                    { from: 'ctf_http_request', to: 'ctf_human_request', condition: 'browser or GUI state must be observed by a person' },
+                ],
+            };
+        default:
+            return {
+                category,
+                entry: 'ctf_start',
+                nodes: [
+                    { tool: 'ctf_start', role: 'route the input', when: 'always' },
+                    { tool: 'ctf_tool_audit', role: 'discover local capabilities', when: 'the category or toolchain is unknown' },
+                    { tool: 'ctf_artifact_profile', role: 'profile a local file', when: 'a path is available' },
+                    { tool: 'ctf_human_request', role: 'request missing human-only input', when: 'no usable artifact or endpoint is available' },
+                ],
+                edges: [
+                    { from: 'ctf_start', to: 'ctf_tool_audit', condition: 'category is unknown' },
+                    { from: 'ctf_start', to: 'ctf_artifact_profile', condition: 'path is provided' },
+                    { from: 'ctf_start', to: 'ctf_human_request', condition: 'input is missing or human-only' },
+                ],
+            };
+    }
 }
 function inferCategory(text, artifact, url) {
     if (url)
@@ -96,34 +183,61 @@ function humanRequests(input, category) {
     if (category === 'web' && !input.url)
         return [startServiceRequest(input)];
     if (!input.path && !input.url && !(input.context ?? input.objective)?.trim()) {
-        return [{
+        return [makeHumanRequest({
                 type: 'provide_data',
                 title: 'Provide challenge input',
                 reason: 'No artifact, URL, or challenge text was supplied.',
-                steps: [
-                    'Place the challenge files in the active workspace or provide the local URL.',
-                    'Return the relative path or URL.',
+                operationOrder: [
+                    {
+                        order: 1,
+                        kind: 'instruction',
+                        title: 'Place or identify the challenge input',
+                        instruction: 'Place the challenge files in the active workspace or identify the local URL.',
+                        expectedSignal: 'Return a log line or OCR text containing the relative path or URL.',
+                    },
                 ],
+                acceptedReturnTypes: ['log', 'ocr_text', 'screenshot'],
+                legacySteps: ['Place the challenge files in the active workspace or provide the local URL.'],
                 expectedResult: {
                     path: 'relative challenge file path when file-based',
                     url: 'local challenge URL when web-based',
                 },
-            }];
+                returnFields: {
+                    log: 'relative path or URL as text',
+                    ocr_text: 'recognized text containing the relative path or URL',
+                    screenshot: 'screenshot text or path if the input is visible in a GUI',
+                },
+            })];
     }
     return [];
 }
 function startServiceRequest(input) {
-    return {
+    return makeHumanRequest({
         type: 'start_service',
         title: 'Start the web challenge service',
         reason: input.path
             ? 'A web category was selected but no reachable URL was provided.'
             : 'A web category was selected and the tool layer needs a concrete host and port.',
-        steps: [
-            'Start the challenge service locally or provide the already-running endpoint.',
-            'Keep the service running for subsequent HTTP diff tools.',
-            'Return host, port, scheme, and any required baseline cookie or token.',
+        operationOrder: [
+            {
+                order: 1,
+                kind: 'instruction',
+                title: 'Start or locate the service',
+                instruction: input.path
+                    ? `Start the challenge service for ${input.path}, or identify the already-running endpoint.`
+                    : 'Start the challenge service locally, or identify the already-running endpoint.',
+                expectedSignal: 'Return terminal log text showing the listening host and port, or OCR/screenshot text with the endpoint.',
+            },
+            {
+                order: 2,
+                kind: 'command',
+                title: 'Check that the service answers',
+                command: 'curl -i -sS --max-time 5 http://HOST:PORT/',
+                expectedSignal: 'Return curl response headers/body preview as log text, replacing HOST and PORT with the observed endpoint.',
+            },
         ],
+        acceptedReturnTypes: ['log', 'screenshot', 'ocr_text'],
+        legacySteps: ['Start the challenge service locally or provide the already-running endpoint.', 'Keep the service running for subsequent HTTP diff tools.'],
         expectedResult: {
             scheme: 'http or https',
             host: 'hostname or IP',
@@ -131,6 +245,11 @@ function startServiceRequest(input) {
             basePath: 'optional base path',
             cookie: 'optional baseline cookie',
         },
-    };
+        returnFields: {
+            log: 'service startup log, curl output, or terminal text',
+            screenshot: 'screenshot text showing the endpoint or browser result',
+            ocr_text: 'OCR text containing host, port, scheme, base path, cookie, or token',
+        },
+    });
 }
 //# sourceMappingURL=router.js.map

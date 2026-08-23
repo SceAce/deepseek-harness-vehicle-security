@@ -6,11 +6,11 @@ import { profileCtfArtifact } from './artifact.js'
 import { debugPwnArtifact, profilePwnArtifact, profileReArtifact, searchRopGadgets } from './binary.js'
 import { auditCtfTools } from './capabilities.js'
 import { probeCryptoInput } from './crypto.js'
-import { createHumanRequest } from './human.js'
+import { createHumanRequest, operationsFromLegacySteps } from './human.js'
 import { profilePcapArtifact, triageMiscArtifact } from './misc.js'
 import { routeCtfStart } from './router.js'
 import { httpDiff, httpRequest } from './web.js'
-import { emptyResult } from './types.js'
+import { emptyResult, type CtfHumanOperation, type CtfHumanReturnType } from './types.js'
 
 export const name = 'ctf-tools'
 export const inject = ['tools']
@@ -122,6 +122,7 @@ export function apply(ctx: Context, config: Config): void {
         availablePythonModules: audit.python.modules.filter(item => item.available).map(item => item.id),
         recommendedTool: decision.recommendedTool,
         recommendedArgs: decision.recommendedArgs,
+        toolGraph: decision.toolGraph,
         observations: [
           ...audit.recommendations.map(item => `recommendation: ${item}`),
           ...(profile?.observations ?? []),
@@ -310,23 +311,56 @@ export function apply(ctx: Context, config: Config): void {
 
   ctx.tools.register(defineTool({
     name: 'ctf_human_request',
-    description: 'Create a structured human-action request when a CTF step needs a person to start a service, operate a GUI, attach a device, provide data, observe state, or confirm a workspace-changing action.',
+    description: 'Create a structured human-action request. The model must provide ordered operations with command or instruction text; the human only returns logs, screenshots, or OCR text.',
     parameters: {
       type: { type: 'string', required: true, description: 'attach_device, start_service, perform_gui_action, provide_data, observe_state, or confirm' },
       title: { type: 'string', required: true, description: 'Short action title' },
       reason: { type: 'string', required: true, description: 'Why the human action is needed' },
-      steps: { type: 'array', required: true, items: { type: 'string' }, description: 'Concrete steps for the human' },
-      expectedResult: { type: 'object', required: true, additionalProperties: true, description: 'Expected structured fields the user should return' },
+      operationOrder: {
+        required: true,
+        type: 'array',
+        items: {
+          type: 'object',
+          additionalProperties: true,
+          properties: {
+            order: { type: 'integer', required: true },
+            kind: { type: 'string', enum: ['command', 'instruction'], required: true },
+            title: { type: 'string', required: true },
+            command: { type: 'string' },
+            instruction: { type: 'string' },
+            expectedSignal: { type: 'string', required: true },
+          },
+        },
+        description: 'Ordered operations. Each item must include kind=command with command text or kind=instruction with instruction text.',
+      },
+      steps: { type: 'array', items: { type: 'string' }, description: 'Deprecated compatibility field; operationOrder is required for model-facing calls' },
+      acceptedReturnTypes: { type: 'array', items: { type: 'string', enum: ['log', 'screenshot', 'ocr_text'] }, description: 'Allowed human return types: log, screenshot, ocr_text' },
+      returnFields: { type: 'object', additionalProperties: true, description: 'Plain-text fields the human should include in logs, screenshots, or OCR text' },
     },
     output: jsonOutput,
     isConcurrencySafe: () => true,
     async execute(args) {
+      const operations: CtfHumanOperation[] = Array.isArray(args.operationOrder) && args.operationOrder.length > 0
+        ? args.operationOrder.map((operation, index) => parseHumanOperation(operation, index))
+        : operationsFromLegacySteps(args.steps ?? [])
+      const acceptedReturnTypes: CtfHumanReturnType[] = (args.acceptedReturnTypes ?? ['log', 'screenshot', 'ocr_text']).map(parseHumanReturnType)
+      const returnFields = Object.fromEntries(Object.entries(args.returnFields ?? {
+        log: 'terminal output or service log text',
+        screenshot: 'screenshot path or image content rendered as text',
+        ocr_text: 'text recognized from the screenshot or GUI',
+      }).map(([key, value]) => [key, String(value)]))
       return createHumanRequest({
         type: parseHumanRequestType(args.type),
         title: args.title,
         reason: args.reason,
-        steps: args.steps,
-        expectedResult: Object.fromEntries(Object.entries(args.expectedResult).map(([key, value]) => [key, String(value)])),
+        operationOrder: operations,
+        acceptedReturnTypes,
+        returnContract: {
+          onlyReturn: acceptedReturnTypes,
+          format: 'plain_text',
+          fields: returnFields,
+        },
+        legacySteps: args.steps,
       }) as unknown as JsonValue
     },
   }))
@@ -365,6 +399,28 @@ function parseHumanRequestType(value: string) {
     || value === 'confirm'
   ) return value
   throw new Error('type must be attach_device, start_service, perform_gui_action, provide_data, observe_state, or confirm')
+}
+
+function parseHumanOperation(value: Record<string, unknown>, index: number): CtfHumanOperation {
+  const kind: 'command' | 'instruction' = value.kind === 'command' ? 'command' : 'instruction'
+  const command = typeof value.command === 'string' ? value.command : undefined
+  const instruction = typeof value.instruction === 'string' ? value.instruction : undefined
+  if (kind === 'command' && !command) throw new Error('command operation requires command text')
+  if (kind === 'instruction' && !instruction) throw new Error('instruction operation requires instruction text')
+  return {
+    order: typeof value.order === 'number' && Number.isInteger(value.order) && value.order > 0 ? value.order : index + 1,
+    kind,
+    title: typeof value.title === 'string' && value.title.trim() ? value.title : `Step ${index + 1}`,
+    ...(kind === 'command' ? { command } : { instruction }),
+    expectedSignal: typeof value.expectedSignal === 'string' && value.expectedSignal.trim()
+      ? value.expectedSignal
+      : 'Return log, screenshot text, or OCR text showing the result.',
+  }
+}
+
+function parseHumanReturnType(value: string): CtfHumanReturnType {
+  if (value === 'log' || value === 'screenshot' || value === 'ocr_text') return value
+  throw new Error('acceptedReturnTypes must contain only log, screenshot, or ocr_text')
 }
 
 function validateConfig(config: Config): void {

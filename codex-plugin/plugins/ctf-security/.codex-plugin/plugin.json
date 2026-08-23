@@ -18,9 +18,12 @@
       "Local capability audit",
       "Artifact profiling",
       "Tool-first next actions",
-      "Structured human requests"
+      "Structured human requests",
+      "Reverse-engineering tool graph",
+      "Pwn tool graph",
+      "Web tool graph"
     ],
-    "defaultPrompt": "Use $investigate-ctf first, call ctf_start or ctf_tool_audit before writing scripts, then follow the recommended CTF tool."
+    "defaultPrompt": "Use $investigate-ctf, $solve-ctf-re, $solve-ctf-pwn, or $solve-ctf-web as appropriate; call ctf_start or ctf_tool_audit before writing scripts, then follow the recommended CTF tool."
   },
   "repository": "https://github.com/SceAce/deepseek-harness-vehicle-security",
   "keywords": [

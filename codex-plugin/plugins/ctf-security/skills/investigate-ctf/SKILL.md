@@ -5,7 +5,7 @@ description: Tool-first CTF investigation for RE, pwn, crypto, misc, and web cha
 
 # Investigate CTF
 
-Use the tool layer before writing a solver. The first action for any CTF prompt is `ctf_start` when a file, URL, category, or challenge text is available; otherwise call `ctf_tool_audit` and request the missing input.
+Use the tool layer before writing a solver. The first action for any CTF prompt is `ctf_start` when a file, URL, category, or challenge text is available; otherwise call `ctf_tool_audit` and request the missing input. For focused work, switch to `$solve-ctf-re`, `$solve-ctf-pwn`, or `$solve-ctf-web`.
 
 ## Core Rule
 
@@ -21,6 +21,12 @@ Use the tool layer before writing a solver. The first action for any CTF prompt 
 - Crypto/Misc: `ctf_crypto_probe`, `ctf_misc_triage`, `ctf_pcap_profile`
 - Web: `ctf_http_request`, `ctf_http_diff`
 - Human actions: `ctf_human_request`
+ 
+## Skill Routing
+
+- Use `$solve-ctf-re` for binaries, decompilation, string/import tracing, and implementation recovery.
+- Use `$solve-ctf-pwn` for mitigations, runtime probing, gadget search, and exploit validation.
+- Use `$solve-ctf-web` for HTTP baselines, response diffs, and service handoff.
 
 ## Evidence
 

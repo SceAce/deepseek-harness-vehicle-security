@@ -170,17 +170,34 @@ const tools = [
   },
   {
     name: 'ctf_human_request',
-    description: 'Create a structured human-action request for service startup, GUI operation, device attachment, data provision, observation, or confirmation.',
+    description: 'Create a structured human-action request. The model must provide ordered operations with command or instruction text; the human only returns logs, screenshots, or OCR text.',
     inputSchema: {
       type: 'object',
       properties: {
         type: { type: 'string', enum: ['attach_device', 'start_service', 'perform_gui_action', 'provide_data', 'observe_state', 'confirm'] },
         title: { type: 'string' },
         reason: { type: 'string' },
-        steps: { type: 'array', items: { type: 'string' } },
-        expectedResult: { type: 'object', additionalProperties: true },
+        operationOrder: {
+          type: 'array',
+          items: {
+            type: 'object',
+            additionalProperties: true,
+            properties: {
+              order: { type: 'integer' },
+              kind: { type: 'string', enum: ['command', 'instruction'] },
+              title: { type: 'string' },
+              command: { type: 'string' },
+              instruction: { type: 'string' },
+              expectedSignal: { type: 'string' },
+            },
+            required: ['order', 'kind', 'title', 'expectedSignal'],
+          },
+        },
+        steps: { type: 'array', items: { type: 'string' }, description: 'Deprecated compatibility field; operationOrder is required.' },
+        acceptedReturnTypes: { type: 'array', items: { type: 'string', enum: ['log', 'screenshot', 'ocr_text'] } },
+        returnFields: { type: 'object', additionalProperties: true },
       },
-      required: ['type', 'title', 'reason', 'steps', 'expectedResult'],
+      required: ['type', 'title', 'reason', 'operationOrder'],
       additionalProperties: false,
     },
   },
@@ -233,6 +250,7 @@ async function callTool(name, args) {
         availablePythonModules: audit.python.modules.filter(item => item.available).map(item => item.id),
         recommendedTool: decision.recommendedTool,
         recommendedArgs: decision.recommendedArgs,
+        toolGraph: decision.toolGraph,
         observations: [
           ...audit.recommendations.map(item => `recommendation: ${item}`),
           ...(profile?.observations ?? []),
@@ -306,15 +324,40 @@ async function callTool(name, args) {
       }, commandOptions)
     }
     case 'ctf_human_request': {
-      const { createHumanRequest } = await runtime('human')
+      const { createHumanRequest, operationsFromLegacySteps } = await runtime('human')
+      const acceptedReturnTypes = Array.isArray(args.acceptedReturnTypes) && args.acceptedReturnTypes.length > 0
+        ? args.acceptedReturnTypes
+        : ['log', 'screenshot', 'ocr_text']
+      const operationOrder = Array.isArray(args.operationOrder) && args.operationOrder.length > 0
+        ? args.operationOrder.map((operation, index) => ({
+          order: Number.isInteger(operation.order) && operation.order > 0 ? operation.order : index + 1,
+          kind: operation.kind === 'command' ? 'command' : 'instruction',
+          title: typeof operation.title === 'string' && operation.title.trim() ? operation.title : `Step ${index + 1}`,
+          ...(operation.kind === 'command' ? { command: requireString(operation.command, 'command') } : { instruction: requireString(operation.instruction, 'instruction') }),
+          expectedSignal: typeof operation.expectedSignal === 'string' && operation.expectedSignal.trim()
+            ? operation.expectedSignal
+            : 'Return log, screenshot text, or OCR text showing the result.',
+        }))
+        : operationsFromLegacySteps(Array.isArray(args.steps) ? args.steps.map(String) : [])
+      const returnFields = typeof args.returnFields === 'object' && args.returnFields !== null
+        ? Object.fromEntries(Object.entries(args.returnFields).map(([key, value]) => [key, String(value)]))
+        : {
+          log: 'terminal output or service log text',
+          screenshot: 'screenshot path or image content rendered as text',
+          ocr_text: 'text recognized from the screenshot or GUI',
+        }
       return createHumanRequest({
         type: args.type,
         title: requireString(args.title, 'title'),
         reason: requireString(args.reason, 'reason'),
-        steps: Array.isArray(args.steps) ? args.steps.map(String) : [],
-        expectedResult: typeof args.expectedResult === 'object' && args.expectedResult !== null
-          ? Object.fromEntries(Object.entries(args.expectedResult).map(([key, value]) => [key, String(value)]))
-          : {},
+        operationOrder,
+        acceptedReturnTypes,
+        returnContract: {
+          onlyReturn: acceptedReturnTypes,
+          format: 'plain_text',
+          fields: returnFields,
+        },
+        legacySteps: Array.isArray(args.steps) ? args.steps.map(String) : undefined,
       })
     }
     default:

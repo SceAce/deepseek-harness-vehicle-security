@@ -1,4 +1,5 @@
 import { profileCtfArtifact, type CtfArtifactProfile } from './artifact.js'
+import { makeHumanRequest } from './human.js'
 import { findExecutable, type ResolvedWorkspaceFile } from '../paths.js'
 import { runCommand, type CommandOptions } from '../process.js'
 import { commandRecord, emptyResult, type CtfToolResultBase } from './types.js'
@@ -33,13 +34,27 @@ export async function triageMiscArtifact(
     base.nextActions.push({ tool: 'ctf_pcap_profile', args: { path: profile.artifact.path }, reason: 'Artifact appears to be a packet capture.' })
   }
   if (/archive|zip|7-zip|rar|gzip|tar/i.test(profile.artifact.fileType ?? '') || ['.zip', '.rar', '.7z', '.gz', '.tar'].includes(profile.artifact.extension)) {
-    base.humanRequired.push({
+    base.humanRequired.push(makeHumanRequest({
       type: 'confirm',
       title: 'Confirm archive extraction',
       reason: 'Archive extraction creates derived files in the workspace; triage has only listed contents.',
-      steps: ['Confirm an output directory under working/ for extraction.', 'Provide any password if the archive is encrypted.'],
+      operationOrder: [
+        {
+          order: 1,
+          kind: 'instruction',
+          title: 'Confirm extraction target',
+          instruction: 'Confirm an output directory under working/ for extraction and provide any archive password if known.',
+          expectedSignal: 'Return a log line with outputDirectory and optional password text.',
+        },
+      ],
+      acceptedReturnTypes: ['log', 'ocr_text'],
+      legacySteps: ['Confirm an output directory under working/ for extraction.', 'Provide any password if the archive is encrypted.'],
       expectedResult: { outputDirectory: 'relative working directory', password: 'optional password' },
-    })
+      returnFields: {
+        log: 'outputDirectory and optional password',
+        ocr_text: 'recognized text containing outputDirectory and optional password',
+      },
+    }))
   }
 
   return { ...base, status: base.humanRequired.length > 0 ? 'human_required' : 'ok', artifact: profile.artifact, toolOutputs }

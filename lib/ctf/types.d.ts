@@ -17,12 +17,28 @@ export interface CtfNextAction {
     args: Record<string, unknown>;
     reason: string;
 }
+export type CtfHumanReturnType = 'log' | 'screenshot' | 'ocr_text';
+export interface CtfHumanOperation {
+    order: number;
+    kind: 'command' | 'instruction';
+    title: string;
+    command?: string;
+    instruction?: string;
+    expectedSignal: string;
+}
 export interface CtfHumanRequest {
     type: 'attach_device' | 'start_service' | 'perform_gui_action' | 'provide_data' | 'observe_state' | 'confirm';
     title: string;
     reason: string;
-    steps: string[];
-    expectedResult: Record<string, string>;
+    operationOrder: CtfHumanOperation[];
+    acceptedReturnTypes: CtfHumanReturnType[];
+    returnContract: {
+        onlyReturn: CtfHumanReturnType[];
+        format: 'plain_text' | 'json';
+        fields: Record<string, string>;
+    };
+    legacySteps?: string[];
+    expectedResult?: Record<string, string>;
 }
 export interface CtfToolResultBase {
     status: CtfToolStatus;

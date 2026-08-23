@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict'
 import { copyFile, mkdtemp, writeFile } from 'node:fs/promises'
+import { createServer } from 'node:http'
+import { once } from 'node:events'
 import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
@@ -31,6 +33,13 @@ const CTF_TOOL_NAMES = [
   'ctf_http_request',
   'ctf_http_diff',
   'ctf_human_request',
+]
+
+const CTF_SKILL_NAMES = [
+  'investigate-ctf',
+  'solve-ctf-pwn',
+  'solve-ctf-re',
+  'solve-ctf-web',
 ]
 
 test('exports an independent CTF namespace and registers core tools', () => {
@@ -87,6 +96,32 @@ test('ctf_start routes an ELF artifact to pwn profile first', async t => {
   assert.equal(result.category, 'pwn')
   assert.equal(result.recommendedTool, 'ctf_pwn_profile')
   assert.deepEqual(result.recommendedArgs, { path: 'chall' })
+  assert.equal(result.toolGraph.entry, 'ctf_pwn_profile')
+  assert.ok(result.toolGraph.edges.some(edge => edge.to === 'ctf_pwn_debug_probe'))
+})
+
+test('ctf_re_profile returns structured facts for an ELF artifact', async t => {
+  const workspace = await mkdtemp(path.join(os.tmpdir(), 'dsh-ctf-re-'))
+  t.after(() => import('node:fs/promises').then(fs => fs.rm(workspace, { recursive: true, force: true })))
+  await copyFile('/bin/true', path.join(workspace, 'chall'))
+
+  const registered = []
+  ctfPlugin.apply({ tools: { register: tool => registered.push(tool) } }, {
+    ...config,
+    workspaceRoot: undefined,
+  })
+  const profile = registered.find(item => item.name === 'ctf_re_profile')
+  const result = await profile.execute(
+    { path: 'chall' },
+    {
+      signal: new AbortController().signal,
+      agent: { session: { header: { cwd: workspace } } },
+    },
+  )
+
+  assert.equal(result.artifact.path, 'chall')
+  assert.equal(result.binary.format, 'elf')
+  assert.ok(result.nextActions.some(action => action.tool === 'ctf_crypto_probe'))
 })
 
 test('ctf_pwn_profile returns structured binary facts for an ELF artifact', async t => {
@@ -127,6 +162,42 @@ test('ctf_crypto_probe detects simple hex text before script generation', async 
   assert.equal(result.encodings[0].decodedPreview, 'ABC')
 })
 
+test('ctf_http_request and ctf_http_diff work against a local HTTP service', async () => {
+  const server = createServer((req, res) => {
+    const body = req.url === '/right' ? 'right-body' : 'left-body'
+    res.writeHead(200, { 'content-type': 'text/plain' })
+    res.end(body)
+  })
+  server.listen(0, '127.0.0.1')
+  await once(server, 'listening')
+  const address = server.address()
+  const port = typeof address === 'object' && address ? address.port : null
+  assert.ok(port)
+
+  const registered = []
+  ctfPlugin.apply({ tools: { register: tool => registered.push(tool) } }, config)
+  const request = registered.find(item => item.name === 'ctf_http_request')
+  const diff = registered.find(item => item.name === 'ctf_http_diff')
+  const left = await request.execute(
+    { url: `http://127.0.0.1:${port}/left`, method: 'GET' },
+    { signal: new AbortController().signal },
+  )
+  const compared = await diff.execute(
+    {
+      urlA: `http://127.0.0.1:${port}/left`,
+      urlB: `http://127.0.0.1:${port}/right`,
+      method: 'GET',
+    },
+    { signal: new AbortController().signal },
+  )
+
+  assert.equal(left.status, 'ok')
+  assert.equal(left.response.statusCode, 200)
+  assert.equal(compared.diff.bodyHashChanged, true)
+
+  server.close()
+})
+
 test('ctf_start returns structured human request for web service gaps', async () => {
   const registered = []
   ctfPlugin.apply({ tools: { register: tool => registered.push(tool) } }, config)
@@ -139,6 +210,8 @@ test('ctf_start returns structured human request for web service gaps', async ()
   assert.equal(result.status, 'human_required')
   assert.equal(result.recommendedTool, 'ctf_human_request')
   assert.equal(result.humanRequired[0].type, 'start_service')
+  assert.equal(result.humanRequired[0].operationOrder[0].kind, 'instruction')
+  assert.equal(result.toolGraph.entry, 'ctf_http_request')
 })
 
 test('ctf_human_request creates deterministic structured request IDs', async () => {
@@ -150,8 +223,24 @@ test('ctf_human_request creates deterministic structured request IDs', async () 
       type: 'start_service',
       title: 'Start challenge',
       reason: 'Need a local URL.',
-      steps: ['Run the provided service.', 'Return host and port.'],
-      expectedResult: { host: 'string', port: 'number' },
+      operationOrder: [
+        {
+          order: 2,
+          kind: 'command',
+          title: 'Confirm the endpoint',
+          command: 'curl -i -sS --max-time 5 http://HOST:PORT/',
+          expectedSignal: 'Return the response headers and body preview as log text.',
+        },
+        {
+          order: 1,
+          kind: 'instruction',
+          title: 'Start the service',
+          instruction: 'Run the provided service.',
+          expectedSignal: 'Return a log line with the listening host and port.',
+        },
+      ],
+      acceptedReturnTypes: ['log', 'ocr_text'],
+      returnFields: { log: 'startup log', ocr_text: 'OCR text with host and port' },
     },
     { signal: new AbortController().signal },
   )
@@ -159,6 +248,9 @@ test('ctf_human_request creates deterministic structured request IDs', async () 
   assert.equal(result.status, 'human_required')
   assert.match(result.requestId, /^human-[0-9a-f]{12}$/)
   assert.equal(result.request.type, 'start_service')
+  assert.equal(result.request.operationOrder[0].title, 'Start the service')
+  assert.equal(result.request.operationOrder[1].kind, 'command')
+  assert.deepEqual(result.request.acceptedReturnTypes, ['log', 'ocr_text'])
 })
 
 test('registers packaged CTF skill through a separate provider', async () => {
@@ -167,11 +259,14 @@ test('registers packaged CTF skill through a separate provider', async () => {
   const fiber = await ctx.plugin(ctfSkillPlugin)
 
   const skills = await ctx.skills.list({ cwd: process.cwd() })
-  assert.deepEqual(skills.map(skill => skill.name), ['investigate-ctf'])
+  assert.deepEqual(skills.map(skill => skill.name).sort(), CTF_SKILL_NAMES)
   assert.ok(skills.every(skill => skill.provider === 'ctf-security'))
 
   const investigation = await ctx.skills.get('investigate-ctf', { cwd: process.cwd() })
   assert.match(investigation.content, /ctf_start/)
+  assert.match((await ctx.skills.get('solve-ctf-re', { cwd: process.cwd() })).content, /ctf_re_profile/)
+  assert.match((await ctx.skills.get('solve-ctf-pwn', { cwd: process.cwd() })).content, /ctf_pwn_profile/)
+  assert.match((await ctx.skills.get('solve-ctf-web', { cwd: process.cwd() })).content, /ctf_http_request/)
 
   await fiber.dispose()
   assert.deepEqual(await ctx.skills.list({ cwd: process.cwd() }), [])

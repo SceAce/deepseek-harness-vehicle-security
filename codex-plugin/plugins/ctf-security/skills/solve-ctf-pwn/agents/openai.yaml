@@ -1,0 +1,11 @@
+interface:
+  display_name: "Solve CTF Pwn"
+  short_description: "Tool-first binary exploitation workflow"
+  default_prompt: "Use $solve-ctf-pwn, call ctf_start or ctf_pwn_profile first, then run the debugger or gadget tools before writing an exploit."
+
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "ctf-security"
+      description: "Portable deterministic CTF tools"
+      transport: "stdio"

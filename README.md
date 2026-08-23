@@ -169,6 +169,19 @@ CTF 侧目标是工具优先：先审计本机能力、初检文件或 URL，再
 | `ctf_http_diff` | 对比两次 HTTP 请求的状态、长度和响应 hash |
 | `ctf_human_request` | 生成结构化人工动作请求，把用户当作可调用的电脑/环境 MCP |
 
+### CTF Skills
+
+```text
+$investigate-ctf   -> 总入口，先路由再下钻
+$solve-ctf-re      -> 逆向工具图
+$solve-ctf-pwn     -> Pwn 工具图
+$solve-ctf-web     -> Web 工具图
+```
+
+`ctf_human_request` 要求模型先给出操作顺序，再给出每步的命令或指令；人类侧只回传 `log`、`screenshot` 或 `ocr_text`，不再依赖自由文本补充。
+
+`ctf_start` 还会返回结构化 `toolGraph`，其中包含当前类别的入口工具、节点、边和转移条件。RE、PWN、WEB 的图分别从 `ctf_re_profile`、`ctf_pwn_profile`、`ctf_http_request` 开始。
+
 ### 安装到 Harness Web profile
 
 默认组合包 `cordis.patch.yml` 会同时启用车联网和 CTF 插件：

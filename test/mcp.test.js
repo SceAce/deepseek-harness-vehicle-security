@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
+import { createServer } from 'node:http'
+import { once } from 'node:events'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import test from 'node:test'
@@ -173,10 +175,71 @@ test('Codex CTF MCP initializes, lists tools, and probes crypto text', async t =
   assert.equal(probed.result.structuredContent.encodings[0].type, 'hex')
   assert.equal(probed.result.structuredContent.encodings[0].decodedPreview, 'ABC')
 
+  const reProfile = await request('tools/call', {
+    name: 'ctf_re_profile',
+    arguments: { workspaceRoot: root, path: 'fixtures/sample.asc' },
+  })
+  assert.equal(reProfile.result.structuredContent.status, 'ok')
+  assert.equal(reProfile.result.structuredContent.artifact.path, 'fixtures/sample.asc')
+
+  const humanRequest = await request('tools/call', {
+    name: 'ctf_human_request',
+    arguments: {
+      type: 'start_service',
+      title: 'Start local service',
+      reason: 'Need a URL.',
+      operationOrder: [
+        {
+          order: 1,
+          kind: 'instruction',
+          title: 'Start service',
+          instruction: 'Run the challenge service and return the startup log.',
+          expectedSignal: 'Return log, screenshot text, or OCR text with host and port.',
+        },
+      ],
+      acceptedReturnTypes: ['log', 'ocr_text'],
+      returnFields: { log: 'startup log', ocr_text: 'OCR text with host and port' },
+    },
+  })
+  assert.equal(humanRequest.result.structuredContent.request.operationOrder[0].kind, 'instruction')
+  assert.deepEqual(humanRequest.result.structuredContent.request.acceptedReturnTypes, ['log', 'ocr_text'])
+
   const human = await request('tools/call', {
     name: 'ctf_start',
     arguments: { category: 'web', objective: 'need service endpoint' },
   })
   assert.equal(human.result.structuredContent.status, 'human_required')
   assert.equal(human.result.structuredContent.humanRequired[0].type, 'start_service')
+  assert.equal(human.result.structuredContent.humanRequired[0].operationOrder[0].kind, 'instruction')
+  assert.equal(human.result.structuredContent.toolGraph.entry, 'ctf_http_request')
+
+  const server = createServer((req, res) => {
+    const body = req.url === '/right' ? 'right-body' : 'left-body'
+    res.writeHead(200, { 'content-type': 'text/plain' })
+    res.end(body)
+  })
+  server.listen(0, '127.0.0.1')
+  await once(server, 'listening')
+  const address = server.address()
+  const port = typeof address === 'object' && address ? address.port : null
+  assert.ok(port)
+
+  const http = await request('tools/call', {
+    name: 'ctf_http_request',
+    arguments: { url: `http://127.0.0.1:${port}/left`, method: 'GET' },
+  })
+  assert.equal(http.result.structuredContent.status, 'ok')
+  assert.equal(http.result.structuredContent.response.statusCode, 200)
+
+  const diff = await request('tools/call', {
+    name: 'ctf_http_diff',
+    arguments: {
+      urlA: `http://127.0.0.1:${port}/left`,
+      urlB: `http://127.0.0.1:${port}/right`,
+      method: 'GET',
+    },
+  })
+  assert.equal(diff.result.structuredContent.diff.bodyHashChanged, true)
+
+  server.close()
 })
