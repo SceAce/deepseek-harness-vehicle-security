@@ -1,0 +1,35 @@
+{
+  "name": "ctf-security",
+  "version": "0.1.0+codex.20260823000000",
+  "description": "Tool-first CTF triage and local capability routing for Codex",
+  "author": {
+    "name": "SceAce"
+  },
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "CTF Tooling",
+    "shortDescription": "Use local CTF tools before writing solver scripts",
+    "longDescription": "CTF first-step router, artifact profiler, local capability audit, and structured human-action requests for RE, pwn, crypto, misc, and web challenges.",
+    "developerName": "SceAce",
+    "category": "Developer Tools",
+    "capabilities": [
+      "CTF routing",
+      "Local capability audit",
+      "Artifact profiling",
+      "Tool-first next actions",
+      "Structured human requests"
+    ],
+    "defaultPrompt": "Use $investigate-ctf first, call ctf_start or ctf_tool_audit before writing scripts, then follow the recommended CTF tool."
+  },
+  "repository": "https://github.com/SceAce/deepseek-harness-vehicle-security",
+  "keywords": [
+    "ctf",
+    "reverse-engineering",
+    "pwn",
+    "crypto",
+    "misc",
+    "web",
+    "codex"
+  ]
+}

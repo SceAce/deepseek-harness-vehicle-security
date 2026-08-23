@@ -8,3 +8,11 @@
         enableBinwalk: true
     - id: vehicle-security-skills
       name: dsh-vehicle-security/skills
+    - id: ctf-tools
+      name: dsh-vehicle-security/ctf-tools
+      config:
+        maxFileBytes: 134217728
+        maxOutputChars: 60000
+        commandTimeoutMs: 20000
+    - id: ctf-skills
+      name: dsh-vehicle-security/ctf-skills

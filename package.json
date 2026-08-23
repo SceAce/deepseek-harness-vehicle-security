@@ -17,11 +17,20 @@
     "./skills": {
       "types": "./lib/skills.d.ts",
       "default": "./lib/skills.js"
+    },
+    "./ctf-tools": {
+      "types": "./lib/ctf/index.d.ts",
+      "default": "./lib/ctf/index.js"
+    },
+    "./ctf-skills": {
+      "types": "./lib/ctf/skills.d.ts",
+      "default": "./lib/ctf/skills.js"
     }
   },
   "files": [
     "lib",
     "codex-plugin/plugins/vehicle-security",
+    "codex-plugin/plugins/ctf-security",
     "cordis.patch.yml",
     "README.md",
     "LICENSE"
@@ -31,7 +40,7 @@
     "build:codex": "node scripts/sync-codex-runtime.mjs",
     "build": "pnpm run build:harness && pnpm run build:codex",
     "test": "pnpm run build && node --test",
-    "check": "tsc -p tsconfig.json --noEmit && node --check scripts/sync-codex-runtime.mjs && node --check codex-plugin/plugins/vehicle-security/skills/analyze-vehicle-security/scripts/vehicle_security.mjs && node --check codex-plugin/plugins/vehicle-security/mcp/server.mjs",
+    "check": "tsc -p tsconfig.json --noEmit && node --check scripts/sync-codex-runtime.mjs && node --check codex-plugin/plugins/vehicle-security/skills/analyze-vehicle-security/scripts/vehicle_security.mjs && node --check codex-plugin/plugins/vehicle-security/mcp/server.mjs && node --check codex-plugin/plugins/ctf-security/mcp/server.mjs",
     "prepare": "pnpm run build",
     "prepack": "pnpm run build"
   },
@@ -68,7 +77,12 @@
     "reverse-engineering",
     "can-bus",
     "uds",
-    "firmware"
+    "firmware",
+    "ctf",
+    "pwn",
+    "crypto",
+    "misc",
+    "web-security"
   ],
   "license": "MIT"
 }
