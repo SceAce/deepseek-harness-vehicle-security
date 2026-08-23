@@ -1,7 +1,7 @@
 import { discoverCtfPython, findCtfExecutable } from './environment.js'
 import { runCommand, type CommandOptions } from '../process.js'
 import { discoverCtfMcpConfiguration } from './mcp.js'
-import { commandRecord, type ToolInvocationRecord } from './types.js'
+import { commandRecord, type CtfToolBinding, type ToolInvocationRecord } from './types.js'
 
 export type CtfCapabilityCategory = 'core' | 're' | 'pwn' | 'crypto' | 'misc' | 'web'
 
@@ -46,6 +46,7 @@ export interface CtfToolAuditResult {
     modules: CtfCapability[]
   }
   mcp: CtfMcpCapability[]
+  toolBindings: CtfToolBinding[]
   commands: ToolInvocationRecord[]
   recommendations: string[]
 }
@@ -172,6 +173,7 @@ export async function auditCtfTools(options: CommandOptions = {}): Promise<CtfTo
       modules: python.modules,
     },
     mcp,
+    toolBindings: buildToolBindings(capabilities, python.modules),
     commands: [...commands, ...python.commands, ...pwndbg.commands],
     recommendations: recommendations(capabilities, python.modules, mcp),
   }
@@ -406,6 +408,156 @@ function recommendations(capabilities: CtfCapability[], modules: CtfCapability[]
     result.push(`Configure ${item.id} through ctf_mcp_configure or the host MCP client before using its external server.`)
   }
   return result
+}
+
+interface ToolBindingSpec {
+  tool: string
+  category: CtfToolBinding['category']
+  purpose: string
+  when: string
+  backendCapabilities: string[]
+  anyBackend?: boolean
+  exampleArgs: Record<string, unknown>
+  fallbackTool?: string
+}
+
+const TOOL_BINDINGS: ToolBindingSpec[] = [
+  {
+    tool: 'ctf_artifact_profile',
+    category: 'auto',
+    purpose: 'Hash and identify one local challenge artifact.',
+    when: 'The file type, path, or integrity is not yet established.',
+    backendCapabilities: ['core.file'],
+    exampleArgs: { path: 'chall' },
+  },
+  {
+    tool: 'ctf_re_profile',
+    category: 're',
+    purpose: 'Collect ELF/PE metadata, imports, strings, and protection facts.',
+    when: 'A binary or source-like artifact needs a compact static overview.',
+    backendCapabilities: ['core.file', 'core.strings', 're.readelf'],
+    fallbackTool: 'ctf_artifact_profile',
+    exampleArgs: { path: 'chall' },
+  },
+  {
+    tool: 'ctf_re_r2_query',
+    category: 're',
+    purpose: 'Run bounded radare2 commands and return raw plus parseable JSON output.',
+    when: 'Functions, xrefs, disassembly, sections, or JSON metadata are useful.',
+    backendCapabilities: ['re.r2'],
+    fallbackTool: 'ctf_re_profile',
+    exampleArgs: { path: 'chall', commands: ['aaa', 'ij', 'afl'] },
+  },
+  {
+    tool: 'ctf_re_ida_script',
+    category: 're',
+    purpose: 'Generate focused IDAPython for an IDA MCP/UI or optional CLI batch run.',
+    when: 'Decompiler-side types, xrefs, or IDA database state is valuable.',
+    backendCapabilities: [],
+    fallbackTool: 'ctf_re_r2_query',
+    exampleArgs: { path: 'chall', focus: 'flag strcmp', execute: false },
+  },
+  {
+    tool: 'ctf_pwn_profile',
+    category: 'pwn',
+    purpose: 'Summarize mitigations, imports, strings, and likely pwn entry points.',
+    when: 'A local executable is the challenge artifact.',
+    backendCapabilities: ['core.file', 'core.strings', 're.readelf'],
+    fallbackTool: 'ctf_artifact_profile',
+    exampleArgs: { path: 'pwn' },
+  },
+  {
+    tool: 'ctf_pwninit',
+    category: 'pwn',
+    purpose: 'Select and patch the challenge loader/libc with backup and restore support.',
+    when: 'Matching libc/ld files, a dependency directory, or a known glibc source exists.',
+    backendCapabilities: ['pwn.pwninit', 're.patchelf'],
+    fallbackTool: 'ctf_pwn_profile',
+    exampleArgs: { path: 'pwn', mode: 'prepare' },
+  },
+  {
+    tool: 'ctf_pwn_gdb_probe',
+    category: 'pwn',
+    purpose: 'Run a bounded GDB session with Pwndbg context, vmmap, registers, and backtrace.',
+    when: 'Heap layout, runtime mappings, breakpoints, or debugger state needs inspection.',
+    backendCapabilities: ['pwn.gdb', 'pwn.pwndbg'],
+    fallbackTool: 'ctf_pwn_debug_probe',
+    exampleArgs: { path: 'pwn', breakAt: 'main' },
+  },
+  {
+    tool: 'ctf_pwn_debug_probe',
+    category: 'pwn',
+    purpose: 'Run generic bounded GDB commands when Pwndbg is unavailable or a custom probe is needed.',
+    when: 'Registers, stack, entrypoint, or a specific breakpoint must be checked.',
+    backendCapabilities: ['pwn.gdb'],
+    fallbackTool: 'ctf_tool_setup',
+    exampleArgs: { path: 'pwn', breakAt: 'main' },
+  },
+  {
+    tool: 'ctf_rop_search',
+    category: 'pwn',
+    purpose: 'Enumerate gadgets through ROPgadget or ropper.',
+    when: 'NX is enabled, a ROP chain is plausible, or gadget availability is unknown.',
+    backendCapabilities: ['pwn.ropgadget', 'pwn.ropper'],
+    anyBackend: true,
+    fallbackTool: 'ctf_pwn_profile',
+    exampleArgs: { path: 'pwn', query: 'pop|ret', maxResults: 80 },
+  },
+  {
+    tool: 'ctf_http_request',
+    category: 'web',
+    purpose: 'Capture one structured HTTP baseline with status, hash, preview, and exact argv.',
+    when: 'A challenge URL or local service endpoint is available.',
+    backendCapabilities: ['web.curl'],
+    fallbackTool: 'ctf_human_request',
+    exampleArgs: { url: 'http://HOST:PORT/', method: 'GET' },
+  },
+  {
+    tool: 'ctf_web_browser_probe',
+    category: 'web',
+    purpose: 'Inspect rendered DOM and optional screenshot through local browser automation.',
+    when: 'Client-side JavaScript or rendered browser state matters.',
+    backendCapabilities: ['web.chromium', 'python.playwright'],
+    anyBackend: true,
+    fallbackTool: 'ctf_human_request',
+    exampleArgs: { url: 'http://HOST:PORT/', captureScreenshot: true },
+  },
+]
+
+function buildToolBindings(
+  capabilities: CtfCapability[],
+  modules: CtfCapability[],
+): CtfToolBinding[] {
+  const available = new Set([...capabilities, ...modules].filter(item => item.available).map(item => item.id))
+  return TOOL_BINDINGS.map(spec => {
+    const availableCapabilities = spec.anyBackend
+      ? spec.backendCapabilities.filter(item => available.has(item))
+      : spec.backendCapabilities.filter(item => available.has(item))
+    const missingCapabilities = spec.anyBackend
+      ? availableCapabilities.length > 0 ? [] : spec.backendCapabilities
+      : spec.backendCapabilities.filter(item => !available.has(item))
+    const availability = spec.backendCapabilities.length === 0
+      ? 'ready'
+      : availableCapabilities.length === 0
+        ? 'missing_backend'
+        : missingCapabilities.length > 0
+          ? 'partial'
+          : 'ready'
+    return {
+      tool: spec.tool,
+      category: spec.category,
+      kind: 'local',
+      callable: true,
+      purpose: spec.purpose,
+      when: spec.when,
+      backendCapabilities: spec.backendCapabilities,
+      availableCapabilities,
+      missingCapabilities,
+      availability,
+      exampleArgs: spec.exampleArgs,
+      fallbackTool: spec.fallbackTool ?? null,
+    }
+  })
 }
 
 function isSecretPlaceholder(key: string, value: string): boolean {

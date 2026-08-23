@@ -40,12 +40,12 @@ test('Codex MCP initializes, lists tools, and decodes UDS', async t => {
     }
   })
 
-  const request = (method, params = {}) => new Promise((resolve, reject) => {
+  const request = (method, params = {}, timeoutMs = 5000) => new Promise((resolve, reject) => {
     const id = nextId++
     const timeout = setTimeout(() => {
       pending.delete(id)
       reject(new Error(`MCP timeout for ${method}: ${stderr}`))
-    }, 5000)
+    }, timeoutMs)
     pending.set(id, {
       resolve: message => {
         clearTimeout(timeout)
@@ -129,12 +129,12 @@ test('Codex CTF MCP initializes, lists tools, and probes crypto text', async t =
     }
   })
 
-  const request = (method, params = {}) => new Promise((resolve, reject) => {
+  const request = (method, params = {}, timeoutMs = 5000) => new Promise((resolve, reject) => {
     const id = nextId++
     const timeout = setTimeout(() => {
       pending.delete(id)
       reject(new Error(`MCP timeout for ${method}: ${stderr}`))
-    }, 5000)
+    }, timeoutMs)
     pending.set(id, {
       resolve: message => {
         clearTimeout(timeout)
@@ -183,6 +183,14 @@ test('Codex CTF MCP initializes, lists tools, and probes crypto text', async t =
   assert.equal(probed.result.structuredContent.encodings[0].type, 'hex')
   assert.equal(probed.result.structuredContent.encodings[0].decodedPreview, 'ABC')
 
+  const audit = await request('tools/call', {
+    name: 'ctf_tool_audit',
+    arguments: {},
+  }, 20000)
+  assert.equal(audit.result.isError, false)
+  assert.ok(audit.result.structuredContent.toolBindings.some(binding => binding.tool === 'ctf_pwn_gdb_probe'))
+  assert.ok(audit.result.structuredContent.toolBindings.some(binding => binding.tool === 'ctf_re_r2_query'))
+
   const configured = await request('tools/call', {
     name: 'ctf_mcp_configure',
     arguments: {
@@ -207,6 +215,20 @@ test('Codex CTF MCP initializes, lists tools, and probes crypto text', async t =
   })
   assert.equal(r2.result.structuredContent.status, 'ok')
   assert.equal(r2.result.structuredContent.query.commands[0], 'ij')
+
+  const start = await request('tools/call', {
+    name: 'ctf_start',
+    arguments: {
+      workspaceRoot: root,
+      objective: 'inspect this pwn binary',
+      category: 'pwn',
+      path: 'fixtures/sample.asc',
+    },
+  }, 20000)
+  assert.equal(start.result.isError, false)
+  assert.ok(Array.isArray(start.result.structuredContent.toolChoices))
+  assert.ok(start.result.structuredContent.toolBindings.some(binding => binding.tool === 'ctf_pwn_gdb_probe'))
+
 
   const ida = await request('tools/call', {
     name: 'ctf_re_ida_script',

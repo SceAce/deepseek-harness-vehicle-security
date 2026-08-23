@@ -1,5 +1,5 @@
 import { type CommandOptions } from '../process.js';
-import { type ToolInvocationRecord } from './types.js';
+import { type CtfToolBinding, type ToolInvocationRecord } from './types.js';
 export type CtfCapabilityCategory = 'core' | 're' | 'pwn' | 'crypto' | 'misc' | 'web';
 export interface CapabilityProbe {
     id: string;
@@ -39,6 +39,7 @@ export interface CtfToolAuditResult {
         modules: CtfCapability[];
     };
     mcp: CtfMcpCapability[];
+    toolBindings: CtfToolBinding[];
     commands: ToolInvocationRecord[];
     recommendations: string[];
 }

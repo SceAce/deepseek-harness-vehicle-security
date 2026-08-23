@@ -5,19 +5,19 @@ description: Tool-first CTF investigation for RE, pwn, crypto, misc, and web cha
 
 # Investigate CTF
 
-Use the tool layer before writing a solver. The first action for every CTF prompt is `ctf_tool_audit`; then call `ctf_start` with the artifact, URL, category, or challenge text. For focused work, switch to `$solve-ctf-re`, `$solve-ctf-pwn`, or `$solve-ctf-web`.
+Use the tool layer before writing a solver. When the local capability state or artifact category is unknown, call `ctf_tool_audit` and/or `ctf_start`; when the target and required backend are already known, call the relevant category tool directly. For focused work, switch to `$solve-ctf-re`, `$solve-ctf-pwn`, or `$solve-ctf-web`.
 
 ## Core Rule
 
-1. Call `ctf_tool_audit` before any category tool or custom script.
+1. Use `ctf_tool_audit` when capability state is unknown or stale; it reports callable local tool bindings, backend dependencies, paths, and example arguments.
 2. Use the reported Python interpreter, venv, executable paths, and MCP state as the capability inventory.
-3. Call `ctf_start` with the known `path`, `url`, `category`, `objective`, and `context`.
-4. Follow `recommendedTool`, `recommendedArgs`, and the returned tool graph.
+3. Use `ctf_start` when routing or a ranked set of tool choices is useful; pass the known `path`, `url`, `category`, `objective`, and `context`.
+4. Choose among `toolChoices`, `recommendedTool`, `nextActions`, and the tool graph according to the evidence question. These are recommendations, not a fixed execution order.
 5. Prefer `/home/source/tools/PyVenv/CTF/bin/python` and its installed modules for Python actions.
 6. Prefer `mcp.ida_pro` for IDA database/decompiler operations, `mcp.chrome` for interactive browser state, and `mcp.tavily` for CVE/version/reference lookup when configured.
 7. If a tool returns `humanRequired`, present the request as a structured action with its exact ordered operations and wait for only `log`, `screenshot`, or `ocr_text`.
 8. If `TAVILY_API_KEY` is the only missing value, call `ctf_mcp_configure`; do not ask the user to hand-write JSON or paths.
-9. Write a new script only after the audit, local tools, and configured MCPs leave a concrete gap.
+9. Write a new script only after the relevant local tool or configured MCP has been considered and leaves a concrete gap.
 
 ## Tool Map
 
@@ -27,6 +27,8 @@ Use the tool layer before writing a solver. The first action for every CTF promp
 - Web: `ctf_http_request`, `ctf_http_diff`, `ctf_web_browser_probe`, `ctf_web_capture_probe`
 - MCP/configuration: `ctf_mcp_configure`, `mcp.ida_pro`, `mcp.r2`, `mcp.gdb_pwndbg`, `mcp.chrome`, `mcp.tavily`
 - Human actions: `ctf_human_request`
+
+`ctf_tool_audit.toolBindings` describes which plugin tools are callable, what local backend they use, and an example argument object. It describes availability and fallbacks; it does not mandate calling every listed tool.
  
 ## Skill Routing
 

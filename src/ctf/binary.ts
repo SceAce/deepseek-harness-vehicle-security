@@ -334,6 +334,7 @@ function stringTags(value: string): string[] {
 function pwnNextActions(artifact: CtfArtifactProfile, binary: BinaryFactSummary): CtfNextAction[] {
   const actions: CtfNextAction[] = [
     { tool: 'ctf_pwninit', args: { path: artifact.path }, reason: 'Use pwninit to select matching workspace ld/libc and create a reproducible patched runtime before final debugger or exploit validation.' },
+    { tool: 'ctf_re_r2_query', args: { path: artifact.path, commands: ['aaa', 'ij', 'afl'] }, reason: 'Use radare2 headless analysis for a compact function and metadata pass instead of reproducing it with shell commands.' },
     { tool: 'ctf_pwn_gdb_probe', args: { path: artifact.path }, reason: 'Use the installed GDB/Pwndbg path first for runtime context before writing debugger code.' },
     { tool: 'ctf_pwn_debug_probe', args: { path: artifact.path }, reason: 'Collect register, entrypoint, stack, and mapping context under gdb.' },
   ]

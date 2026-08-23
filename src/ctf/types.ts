@@ -23,6 +23,27 @@ export interface CtfNextAction {
   reason: string
 }
 
+export interface CtfToolChoice extends CtfNextAction {
+  availability: 'ready' | 'partial' | 'missing_backend' | 'host_dependent'
+  backendCapabilities: string[]
+  missingCapabilities: string[]
+}
+
+export interface CtfToolBinding {
+  tool: string
+  category: CtfCategory
+  kind: 'local'
+  callable: true
+  purpose: string
+  when: string
+  backendCapabilities: string[]
+  availableCapabilities: string[]
+  missingCapabilities: string[]
+  availability: 'ready' | 'partial' | 'missing_backend'
+  exampleArgs: Record<string, unknown>
+  fallbackTool: string | null
+}
+
 export type CtfHumanReturnType = 'log' | 'screenshot' | 'ocr_text'
 
 export interface CtfHumanOperation {

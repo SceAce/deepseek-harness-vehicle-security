@@ -18,7 +18,7 @@ const workspaceProperties = {
 const tools = [
   {
     name: 'ctf_tool_audit',
-    description: 'Inventory local CTF capabilities for RE, pwn, crypto, misc, and web.',
+    description: 'Refresh local CTF capabilities. Returns executable paths, Python environment, MCP state, and directly callable local tool bindings with example arguments.',
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },
   },
   {
@@ -51,7 +51,7 @@ const tools = [
   },
   {
     name: 'ctf_start',
-    description: 'CTF first-step router that audits local capabilities, profiles an optional artifact, chooses the next CTF tool, and lists human actions.',
+    description: 'CTF router and capability snapshot. It audits local capabilities, profiles an optional artifact, and returns ranked tool choices; direct category tools remain callable when context is already known.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -67,7 +67,7 @@ const tools = [
   },
   {
     name: 'ctf_re_profile',
-    description: 'Reverse-engineering profile for a local CTF artifact using installed local tools.',
+    description: 'Collect a compact reverse-engineering overview using installed local tools. Use the returned actions to choose r2, IDA script, or runtime probes.',
     inputSchema: {
       type: 'object',
       properties: { ...workspaceProperties, path: { type: 'string' } },
@@ -77,7 +77,7 @@ const tools = [
   },
   {
     name: 'ctf_re_r2_query',
-    description: 'Run bounded radare2 commands against a local artifact.',
+    description: 'Run bounded radare2 commands for fast headless functions, xrefs, metadata, and focused disassembly. Returns exact commands and raw/JSON evidence.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -91,7 +91,7 @@ const tools = [
   },
   {
     name: 'ctf_re_ida_script',
-    description: 'Generate a focused IDAPython script and optionally execute it in IDA batch mode.',
+    description: 'Generate focused IDAPython for the configured IDA MCP/UI. Optional CLI batch execution is disabled by default and only needed for a specific batch task.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -106,7 +106,7 @@ const tools = [
   },
   {
     name: 'ctf_pwn_profile',
-    description: 'Pwn binary profile using installed tools; returns mitigations, imports, strings, and next actions.',
+    description: 'Collect a compact Pwn overview. Choose independently between pwninit, radare2, Pwndbg/GDB, and gadget search based on the next evidence question.',
     inputSchema: {
       type: 'object',
       properties: { ...workspaceProperties, path: { type: 'string' } },
@@ -116,7 +116,7 @@ const tools = [
   },
   {
     name: 'ctf_pwninit',
-    description: 'Use pwninit to select a matching loader/libc, patch or diagnose the local runtime, and inspect or restore backups.',
+    description: 'Patch or diagnose a Pwn binary with matching ld/libc files. Prepare is deterministic and creates a backup; doctor, restore, and list_backups inspect runtime state.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -140,7 +140,7 @@ const tools = [
   },
   {
     name: 'ctf_pwn_debug_probe',
-    description: 'Run a bounded gdb batch probe on a local pwn binary.',
+    description: 'Run bounded generic GDB for registers, stack, entrypoint, breakpoints, or custom commands when Pwndbg is not needed or unavailable.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -156,7 +156,7 @@ const tools = [
   },
   {
     name: 'ctf_pwn_gdb_probe',
-    description: 'Run a Pwndbg-oriented GDB batch probe on a local pwn binary.',
+    description: 'Run bounded GDB with the Pwndbg frontend when available for heap/runtime state, context, vmmap, registers, and backtraces.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -172,7 +172,7 @@ const tools = [
   },
   {
     name: 'ctf_rop_search',
-    description: 'Search ROP gadgets using ROPgadget or ropper.',
+    description: 'Search gadgets using ROPgadget or ropper when NX or a gadget-based control-flow path is relevant.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -381,8 +381,11 @@ async function callTool(name, args) {
         artifact: profile?.artifact ?? null,
         availableCapabilities: audit.capabilities.filter(item => item.available).map(item => item.id),
         availablePythonModules: audit.python.modules.filter(item => item.available).map(item => item.id),
+        mcp: audit.mcp,
+        toolBindings: audit.toolBindings,
         recommendedTool: decision.recommendedTool,
         recommendedArgs: decision.recommendedArgs,
+        toolChoices: decision.toolChoices,
         toolGraph: decision.toolGraph,
         observations: [
           ...audit.recommendations.map(item => `recommendation: ${item}`),

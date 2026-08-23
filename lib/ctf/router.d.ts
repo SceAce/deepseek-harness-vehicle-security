@@ -1,6 +1,6 @@
 import type { CtfArtifactProfile } from './artifact.js';
 import type { CtfToolAuditResult } from './capabilities.js';
-import type { CtfCategory, CtfHumanRequest, CtfNextAction, ResolvedCtfCategory } from './types.js';
+import type { CtfCategory, CtfHumanRequest, CtfNextAction, CtfToolChoice, ResolvedCtfCategory } from './types.js';
 export interface CtfStartInput {
     objective?: string;
     category?: CtfCategory;
@@ -13,6 +13,7 @@ export interface CtfRouteDecision {
     reasons: string[];
     recommendedTool: string;
     recommendedArgs: Record<string, unknown>;
+    toolChoices: CtfToolChoice[];
     toolGraph: CtfToolGraph;
     nextActions: CtfNextAction[];
     humanRequired: CtfHumanRequest[];

@@ -49,7 +49,7 @@ export function apply(ctx: Context, config: Config): void {
 
   ctx.tools.register(defineTool({
     name: 'ctf_tool_audit',
-    description: 'Inventory local CTF capabilities for RE, pwn, crypto, misc, and web. Call this before writing solver scripts so the agent uses installed tools first.',
+    description: 'Refresh local CTF capabilities. Returns executable paths, the selected Python environment, MCP configuration, and directly callable local tool bindings with example arguments. Intake is recommended, not mandatory.',
     parameters: {},
     output: jsonOutput,
     timeoutMs: config.commandTimeoutMs * 2,
@@ -111,7 +111,7 @@ export function apply(ctx: Context, config: Config): void {
 
   ctx.tools.register(defineTool({
     name: 'ctf_start',
-    description: 'CTF first-step router. Given a file, URL, category, or prompt, audit local capabilities, profile the artifact, choose the next CTF tool, and list any human action needed.',
+    description: 'CTF router and capability snapshot. It audits local capabilities, profiles an optional artifact, selects a category, and returns ranked tool choices. Use it for intake when useful; direct category tools remain callable when the target and context are already known.',
     parameters: {
       objective: { type: 'string', description: 'Challenge objective or user question' },
       path: { type: 'string', description: 'Optional challenge artifact path relative to the active workspace' },
@@ -148,8 +148,10 @@ export function apply(ctx: Context, config: Config): void {
         availableCapabilities: audit.capabilities.filter(item => item.available).map(item => item.id),
         availablePythonModules: audit.python.modules.filter(item => item.available).map(item => item.id),
         mcp: audit.mcp,
+        toolBindings: audit.toolBindings,
         recommendedTool: decision.recommendedTool,
         recommendedArgs: decision.recommendedArgs,
+        toolChoices: decision.toolChoices,
         toolGraph: decision.toolGraph,
         observations: [
           ...audit.recommendations.map(item => `recommendation: ${item}`),
@@ -184,7 +186,7 @@ export function apply(ctx: Context, config: Config): void {
 
   ctx.tools.register(defineTool({
     name: 'ctf_pwn_profile',
-    description: 'Pwn binary profile using installed tools such as checksec, readelf, strings, and binutils; returns mitigations, imports, strings, and next debug/gadget actions.',
+    description: 'Static Pwn profile. Returns mitigation, import, string, and next-action evidence. Choose independently between pwninit for matching libc/ld, r2 for headless RE, Pwndbg/GDB for runtime state, and ROP search for gadget questions.',
     parameters: {
       path: { type: 'string', required: true, description: 'Binary path relative to the active workspace' },
     },
@@ -199,7 +201,7 @@ export function apply(ctx: Context, config: Config): void {
 
   ctx.tools.register(defineTool({
     name: 'ctf_pwninit',
-    description: 'Use the installed pwninit to select a matching ld/libc, patch the local challenge runtime, inspect or restore backups, and verify the resulting binary hash. Defaults to deterministic libc patching without entering the interactive wizard.',
+    description: 'Patch or diagnose a Pwn binary with matching ld/libc files. Use when a local runtime source exists; prepare is deterministic and creates a backup, while doctor/restore/list_backups are non-exploit maintenance operations.',
     parameters: {
       path: { type: 'string', required: true, description: 'Pwn binary path relative to the active workspace' },
       mode: { type: 'string', enum: ['prepare', 'doctor', 'restore', 'list_backups'], description: 'prepare patches the runtime; doctor diagnoses it; restore reverts the latest backup; list_backups lists available backups' },
@@ -241,7 +243,7 @@ export function apply(ctx: Context, config: Config): void {
 
   ctx.tools.register(defineTool({
     name: 'ctf_pwn_debug_probe',
-    description: 'Run a bounded gdb batch probe on a local pwn binary and return registers, entrypoint disassembly, stack sample, backtrace, and raw debugger output.',
+    description: 'Run bounded generic GDB on a local Pwn binary. Use for registers, stack, entrypoint, a named/address breakpoint, or custom GDB commands when Pwndbg is not needed or unavailable.',
     parameters: {
       path: { type: 'string', required: true, description: 'Binary path relative to the active workspace' },
       argv: { type: 'array', items: { type: 'string' }, description: 'Optional process argv values' },
@@ -263,7 +265,7 @@ export function apply(ctx: Context, config: Config): void {
 
   ctx.tools.register(defineTool({
     name: 'ctf_pwn_gdb_probe',
-    description: 'Run a Pwndbg-oriented GDB batch probe with context, vmmap, registers, and backtrace commands. Use this before writing a pwn debugger script.',
+    description: 'Run bounded GDB with the Pwndbg frontend when available. Use for heap/runtime state, context, vmmap, registers, backtrace, or a named/address breakpoint; returns raw debugger output and exact argv.',
     parameters: {
       path: { type: 'string', required: true, description: 'Binary path relative to the active workspace' },
       argv: { type: 'array', items: { type: 'string' }, description: 'Optional process argv values' },
@@ -285,7 +287,7 @@ export function apply(ctx: Context, config: Config): void {
 
   ctx.tools.register(defineTool({
     name: 'ctf_re_r2_query',
-    description: 'Run bounded radare2 commands against a local artifact and return raw output plus the last parseable JSON result.',
+    description: 'Run bounded radare2 commands against a local artifact. Use for fast headless functions, xrefs, sections, metadata, and focused disassembly; returns exact commands, raw output, and the last parseable JSON result.',
     parameters: {
       path: { type: 'string', required: true, description: 'Artifact path relative to the active workspace' },
       commands: { type: 'array', items: { type: 'string' }, description: 'Ordered r2 commands; defaults to aaa and ij' },
@@ -301,7 +303,7 @@ export function apply(ctx: Context, config: Config): void {
 
   ctx.tools.register(defineTool({
     name: 'ctf_re_ida_script',
-    description: 'Generate a focused IDAPython script for functions, strings, and xrefs, and optionally execute it in IDA batch mode when an IDA CLI is installed.',
+    description: 'Generate focused IDAPython for functions, strings, and xrefs. Use with the configured IDA MCP/UI; optional IDA CLI batch execution is only a fallback and is disabled by default.',
     parameters: {
       path: { type: 'string', required: true, description: 'Artifact path relative to the active workspace' },
       focus: { type: 'string', description: 'Optional terms used to filter strings and guide the generated script' },
@@ -318,7 +320,7 @@ export function apply(ctx: Context, config: Config): void {
 
   ctx.tools.register(defineTool({
     name: 'ctf_rop_search',
-    description: 'Search ROP gadgets in a local binary using ROPgadget or ropper when available.',
+    description: 'Search gadgets in a local binary using ROPgadget or ropper. Use when NX is enabled, a ROP chain is plausible, or available control-flow gadgets need confirmation.',
     parameters: {
       path: { type: 'string', required: true, description: 'Binary path relative to the active workspace' },
       query: { type: 'string', description: 'Optional gadget query, for example pop|ret' },

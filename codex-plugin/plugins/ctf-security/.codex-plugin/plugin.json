@@ -23,7 +23,7 @@
       "Pwn tool graph",
       "Web tool graph"
     ],
-    "defaultPrompt": "For every CTF task, call ctf_tool_audit first. Prefer /home/source/tools/PyVenv/CTF/bin/python and its installed modules, use mcp-chrome for interactive browser work, use Tavily MCP for CVE/version research, and use the configured IDA MCP instead of requiring IDA CLI. Write a new script only after the audit and available MCPs leave a concrete gap; use ctf_mcp_configure when only a key such as TAVILY_API_KEY is needed."
+    "defaultPrompt": "For CTF tasks, inspect ctf_tool_audit/toolBindings when capability state is unknown, then let the evidence choose among callable local tools and configured MCPs. Prefer /home/source/tools/PyVenv/CTF/bin/python and its installed modules, use mcp-chrome for interactive browser work, Tavily MCP for CVE/version research, and the configured IDA MCP instead of requiring IDA CLI. Write a new script only after the relevant tool path leaves a concrete gap; use ctf_mcp_configure when only a key such as TAVILY_API_KEY is needed."
   },
   "repository": "https://github.com/SceAce/deepseek-harness-vehicle-security",
   "keywords": [

@@ -1,7 +1,7 @@
 interface:
   display_name: "Solve CTF Pwn"
   short_description: "Tool-first binary exploitation workflow"
-  default_prompt: "Use $solve-ctf-pwn, call ctf_tool_audit first, prefer GDB/Pwndbg MCP or local Pwndbg, then run debugger and gadget tools before writing an exploit."
+  default_prompt: "Use $solve-ctf-pwn. Inspect ctf_tool_audit/toolBindings when capability state is unknown, then choose among ctf_pwn_profile, ctf_pwninit, ctf_re_r2_query, ctf_pwn_gdb_probe, ctf_pwn_debug_probe, and ctf_rop_search according to the evidence question. Do not assume a fixed tool order."
 
 dependencies:
   tools:

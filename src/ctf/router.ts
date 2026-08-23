@@ -2,7 +2,7 @@ import type { CtfArtifactProfile } from './artifact.js'
 import { hasCapability } from './capabilities.js'
 import type { CtfToolAuditResult } from './capabilities.js'
 import { makeHumanRequest } from './human.js'
-import type { CtfCategory, CtfHumanRequest, CtfNextAction, ResolvedCtfCategory } from './types.js'
+import type { CtfCategory, CtfHumanRequest, CtfNextAction, CtfToolChoice, ResolvedCtfCategory } from './types.js'
 
 export interface CtfStartInput {
   objective?: string
@@ -17,6 +17,7 @@ export interface CtfRouteDecision {
   reasons: string[]
   recommendedTool: string
   recommendedArgs: Record<string, unknown>
+  toolChoices: CtfToolChoice[]
   toolGraph: CtfToolGraph
   nextActions: CtfNextAction[]
   humanRequired: CtfHumanRequest[]
@@ -54,14 +55,19 @@ export function routeCtfStart(
   const text = `${input.objective ?? ''}\n${input.context ?? ''}\n${input.url ?? ''}`
   const category = explicit ?? inferCategory(text, artifact, input.url)
   const reasons = routeReasons(category, text, artifact, Boolean(input.url), explicit)
-  const { tool, args } = firstTool(category, input, artifact, audit)
-  const nextActions: CtfNextAction[] = tool ? [{ tool, args, reason: reasons[0] ?? 'Run the first category-specific CTF tool.' }] : []
+  const toolChoices = choicesForCategory(category, input, artifact, audit)
+  const first = toolChoices[0] ?? firstTool(category, input, artifact, audit)
+  const { tool, args } = first
+  const nextActions: CtfNextAction[] = tool
+    ? [{ tool, args, reason: reasons[0] ?? 'Run the first category-specific CTF tool.' }]
+    : []
   const humanRequired = humanRequests(input, category)
   return {
     category,
     reasons,
     recommendedTool: tool,
     recommendedArgs: args,
+    toolChoices,
     toolGraph: toolGraphForCategory(category),
     nextActions,
     humanRequired,
@@ -236,11 +242,15 @@ function firstTool(
     case 'pwn':
       return artifact
         ? { tool: 'ctf_pwn_profile', args: { path: artifact.path } }
-        : { tool: 'ctf_artifact_profile', args: { path: input.path } }
+        : input.path
+          ? { tool: 'ctf_artifact_profile', args: { path: input.path } }
+          : { tool: 'ctf_tool_audit', args: {} }
     case 're':
       return artifact
         ? { tool: 'ctf_re_profile', args: { path: artifact.path } }
-        : { tool: 'ctf_artifact_profile', args: { path: input.path } }
+        : input.path
+          ? { tool: 'ctf_artifact_profile', args: { path: input.path } }
+          : { tool: 'ctf_tool_audit', args: {} }
     case 'web':
       return input.url
         ? { tool: 'ctf_http_request', args: { url: input.url, method: 'GET' } }
@@ -257,6 +267,59 @@ function firstTool(
       if (artifact) return { tool: 'ctf_artifact_profile', args: { path: artifact.path } }
       if (hasCapability(audit, 'web.curl') && input.url) return { tool: 'ctf_http_request', args: { url: input.url, method: 'GET' } }
       return { tool: 'ctf_tool_audit', args: {} }
+  }
+}
+
+function choicesForCategory(
+  category: ResolvedCtfCategory,
+  input: CtfStartInput,
+  artifact: CtfArtifactProfile | null,
+  audit: CtfToolAuditResult,
+): CtfToolChoice[] {
+  const pathValue = artifact?.path ?? input.path
+  const pathArgs = pathValue ? { path: pathValue } : null
+  if (category === 'pwn' && pathArgs) {
+    return [
+      choice(audit, 'ctf_pwn_profile', pathArgs, 'Get a static mitigation/import overview first when the binary is not yet understood.'),
+      choice(audit, 'ctf_pwninit', { ...pathArgs, mode: 'prepare' }, 'Use when matching loader/libc files or a known glibc source are present.'),
+      choice(audit, 'ctf_re_r2_query', { ...pathArgs, commands: ['aaa', 'ij', 'afl'] }, 'Use when compact headless functions, metadata, or xrefs will answer the next question.'),
+      choice(audit, 'ctf_pwn_gdb_probe', { ...pathArgs, breakAt: 'main' }, 'Use when heap/runtime state, mappings, or Pwndbg context matter.'),
+      choice(audit, 'ctf_pwn_debug_probe', { ...pathArgs, breakAt: 'main' }, 'Use when generic GDB registers, stack, or a breakpoint are enough.'),
+      choice(audit, 'ctf_rop_search', { ...pathArgs, query: 'pop|ret', maxResults: 80 }, 'Use when NX or a gadget-based control-flow path is relevant.'),
+    ]
+  }
+  if (category === 're' && pathArgs) {
+    return [
+      choice(audit, 'ctf_re_profile', pathArgs, 'Get a compact static overview before choosing a deeper RE path.'),
+      choice(audit, 'ctf_re_r2_query', { ...pathArgs, commands: ['aaa', 'ij', 'afl'] }, 'Use for fast headless disassembly, metadata, and xrefs.'),
+      choice(audit, 'ctf_re_ida_script', { ...pathArgs, focus: '', execute: false }, 'Use when IDA database/decompiler state or IDAPython is useful.'),
+      choice(audit, 'ctf_pwn_gdb_probe', { ...pathArgs, breakAt: 'main' }, 'Use only when runtime behavior must validate a static hypothesis.'),
+    ]
+  }
+  if (category === 'web' && input.url) {
+    return [
+      choice(audit, 'ctf_http_request', { url: input.url, method: 'GET' }, 'Capture a baseline request when an endpoint is available.'),
+      choice(audit, 'ctf_web_browser_probe', { url: input.url, captureScreenshot: true }, 'Use when rendered DOM or client-side JavaScript matters.'),
+      choice(audit, 'ctf_http_diff', { urlA: input.url, urlB: input.url, method: 'GET' }, 'Use after defining a controlled request variation.'),
+    ]
+  }
+  return []
+}
+
+function choice(
+  audit: CtfToolAuditResult,
+  tool: string,
+  args: Record<string, unknown>,
+  reason: string,
+): CtfToolChoice {
+  const binding = audit.toolBindings.find(item => item.tool === tool)
+  return {
+    tool,
+    args,
+    reason,
+    availability: binding?.availability ?? 'host_dependent',
+    backendCapabilities: binding?.backendCapabilities ?? [],
+    missingCapabilities: binding?.missingCapabilities ?? [],
   }
 }
 

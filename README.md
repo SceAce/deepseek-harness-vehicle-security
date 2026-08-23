@@ -155,8 +155,8 @@ CTF 侧目标是工具优先：先审计本机能力、初检文件或 URL，再
 
 | 工具 | 用途 |
 | --- | --- |
-| `ctf_start` | CTF 第一入口：审计本机能力、初检附件、判断 RE/Pwn/Crypto/Misc/Web，并给出下一步工具 |
-| `ctf_tool_audit` | 检查本机 CTF 能力：binutils、GDB、pwntools、Sage/Z3、tshark、curl 等 |
+| `ctf_start` | CTF 路由和能力快照：审计本机能力、初检附件、判断 RE/Pwn/Crypto/Misc/Web，并返回排序后的工具选择 |
+| `ctf_tool_audit` | 检查本机 CTF 能力，并返回可调用工具的本地绑定、后端依赖、可用状态和示例参数 |
 | `ctf_mcp_configure` | 自动生成 CTF 外部 MCP 配置；只接收 `TAVILY_API_KEY` 等 secret，不要求手写 JSON 或路径 |
 | `ctf_artifact_profile` | 对文件做 hash、大小、magic、file 类型、熵和文本样本初检 |
 | `ctf_re_profile` | 用 `file/readelf/strings` 等工具提取逆向线索 |
@@ -188,7 +188,7 @@ $solve-ctf-web     -> Web 工具图
 
 `ctf_human_request` 要求模型先给出操作顺序，再给出每步的命令或指令；人类侧只回传 `log`、`screenshot` 或 `ocr_text`，不再依赖自由文本补充。
 
-`ctf_start` 还会返回结构化 `toolGraph`，其中包含当前类别的入口工具、节点、边和转移条件。RE、PWN、WEB 的图分别从 `ctf_re_profile`、`ctf_pwn_profile`、`ctf_http_request` 开始。
+`ctf_start` 还会返回结构化 `toolGraph` 和 `toolChoices`。`toolChoices` 包含工具、示例参数、后端能力和可用状态；它们是给模型决策的证据，不是固定执行顺序。RE、PWN、WEB 的图分别从 `ctf_re_profile`、`ctf_pwn_profile`、`ctf_http_request` 开始。
 
 ### CTF 工具安装与外部 MCP
 
@@ -197,6 +197,7 @@ CTF 插件只调用本机已安装程序、生成确定性脚本、检查外部 
 - `capabilities`：本机可执行文件和 Python 模块；
 - `python`：实际选中的 Python、来源、venv 和 `bin` 路径；
 - `mcp`：外部 MCP 是否在人工提供的配置中出现；
+- `toolBindings`：每个 CTF 工具使用的本地后端、当前可用能力、缺失能力、示例参数和 fallback；
 - `recommendations`：缺少能力时应调用的工具或 setup 请求。
 
 Python 工具优先使用：
@@ -251,7 +252,7 @@ export DSH_CTF_MCP_CONFIG="$PWD/ctf-mcp.json"
 - 配置文件默认写入 `~/.config/dsh/ctf-mcp.json`，也可以通过 `DSH_CTF_MCP_CONFIG` 或 `configPath` 指定；
 - 仓库内置的 `.mcp.json` 只启动 CTF 自身的本地 MCP，不会把外部 server 与车联网插件混在一起。
 
-模型的默认调用顺序是：先 `ctf_tool_audit`，再根据工具图选择本机工具或外部 MCP。IDA MCP 已配置时不要求安装 IDA CLI；`ctf_re_ida_script` 仍然负责生成 IDAPython，CLI 仅用于需要 batch 执行的场景。Web 交互优先使用 `mcp-chrome`，无 MCP 时才回退到本机 Chromium/Chrome headless；CVE、漏洞版本和依赖资料优先使用 Tavily MCP。
+模型的工具策略是：能力或类别未知时调用 `ctf_tool_audit`/`ctf_start` 获取绑定和选择；目标与后端明确时可以直接调用具体工具。模型根据证据问题自行决定是否使用 r2、IDA、GDB/Pwndbg、pwninit 或 ROP 工具，不要求每道题执行全部工具。IDA MCP 已配置时不要求安装 IDA CLI；`ctf_re_ida_script` 仍然负责生成 IDAPython，CLI 仅用于需要 batch 执行的场景。Web 交互优先使用 `mcp-chrome`，无 MCP 时才回退到本机 Chromium/Chrome headless；CVE、漏洞版本和依赖资料优先使用 Tavily MCP。
 
 ### 推荐工具分工
 
@@ -315,7 +316,7 @@ npx @deepseek-ai/dsh@next web
 ```text
 先用 ctf_start 分析 chall，类别自动判断。
 使用 ctf_tool_audit 检查本机 CTF 工具。
-对 chall 做 ctf_pwn_profile，然后按 nextActions 选择 GDB 或 ROP 工具。
+对 chall 做 ctf_pwn_profile，根据漏洞假设从 nextActions/toolChoices 中选择 GDB/Pwndbg、r2、pwninit 或 ROP 工具。
 如果工作区同时有 `ld-*.so*` 和 `libc-*.so*`，先对 chall 调用 `ctf_pwninit`，再重新调用 `ctf_pwn_gdb_probe` 验证目标 glibc 已加载。
 对 cipher.txt 做 ctf_crypto_probe，先不要写脚本。
 对 capture.pcapng 做 ctf_pcap_profile。
@@ -329,4 +330,4 @@ Codex 插件位于：
 codex-plugin/plugins/ctf-security
 ```
 
-本地 marketplace 已包含 `ctf-security`。Codex 安装后优先使用 `$investigate-ctf`，再根据 `ctf_start` 返回的 `recommendedTool` 调用具体工具。
+本地 marketplace 已包含 `ctf-security`。Codex 安装后可以使用 `$investigate-ctf` 获取工具绑定和路由，也可以在上下文明确时直接使用对应的 CTF 工具。
