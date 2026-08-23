@@ -147,7 +147,7 @@ export function toolGraphForCategory(category: ResolvedCtfCategory): CtfToolGrap
           { tool: 'mcp.chrome', role: 'use the configured mcp-chrome browser bridge for tabs, DOM, console, network, cookies, and screenshots', when: 'mcp-chrome is configured' },
           { tool: 'ctf_web_capture_probe', role: 'check live mitmproxy capture and hand off startup', when: 'HTTP(S) flow capture or replay is needed' },
           { tool: 'mcp.tavily', role: 'search CVEs, framework versions, and web vulnerability references', when: 'external web research is needed and Tavily MCP is configured' },
-          { tool: 'ctf_tool_setup', role: 'request Chrome DevTools MCP or mitmproxy setup', when: 'the external browser/proxy capability is not configured' },
+          { tool: 'ctf_tool_setup', role: 'request mcp-chrome or mitmproxy setup', when: 'the external browser/proxy capability is not configured' },
           { tool: 'ctf_human_request', role: 'handoff service/browser/GUI operation', when: 'no endpoint or human-only interaction is available' },
         ],
         edges: [
@@ -159,7 +159,7 @@ export function toolGraphForCategory(category: ResolvedCtfCategory): CtfToolGrap
           { from: 'ctf_http_request', to: 'mcp.chrome', condition: 'mcp-chrome is configured and interactive browser state must be observed' },
           { from: 'ctf_http_request', to: 'ctf_web_capture_probe', condition: 'live HTTP(S) flows must be captured or replayed' },
           { from: 'ctf_http_request', to: 'mcp.tavily', condition: 'CVE, framework, dependency, or vulnerability reference lookup is required' },
-          { from: 'ctf_web_browser_probe', to: 'ctf_tool_setup', condition: 'interactive Chrome DevTools MCP actions are needed' },
+          { from: 'ctf_web_browser_probe', to: 'ctf_tool_setup', condition: 'interactive mcp-chrome actions are needed' },
           { from: 'ctf_web_capture_probe', to: 'ctf_tool_setup', condition: 'mitmproxy is missing or must be configured' },
           { from: 'ctf_http_request', to: 'ctf_human_request', condition: 'browser or GUI state must be observed by a person' },
         ],

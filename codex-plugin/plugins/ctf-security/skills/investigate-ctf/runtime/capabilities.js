@@ -31,6 +31,7 @@ const PROBES = [
     { id: 'web.httpx', category: 'web', executable: 'httpx', args: ['--version'], operations: ['HTTP probing'] },
     { id: 'web.sqlmap', category: 'web', executable: 'sqlmap', args: ['--version'], operations: ['SQL injection verification on local challenge targets'] },
     { id: 'web.chromium', category: 'web', executable: 'chromium', args: ['--version'], operations: ['browser-backed observation'] },
+    { id: 'web.mcp_chrome_bridge', category: 'web', executable: 'mcp-chrome-bridge', args: ['--version'], operations: ['Chrome native-messaging bridge and MCP HTTP service'] },
     { id: 'web.ffuf', category: 'web', executable: 'ffuf', args: ['-V'], operations: ['content and parameter discovery'] },
     { id: 'web.feroxbuster', category: 'web', executable: 'feroxbuster', args: ['--version'], operations: ['content discovery'] },
     { id: 'web.mitmproxy', category: 'web', executable: 'mitmproxy', args: ['--version'], operations: ['HTTP(S) proxy capture and replay'] },

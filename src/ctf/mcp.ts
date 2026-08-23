@@ -1,6 +1,7 @@
 import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
+import { findCtfExecutable } from './environment.js'
 import { emptyResult, type CtfToolResultBase } from './types.js'
 
 export interface CtfMcpDiscovery {
@@ -105,7 +106,10 @@ export async function configureCtfMcp(args: CtfMcpConfigureArgs = {}): Promise<C
     const chromeUrl = args.chromeUrl?.trim()
       || process.env.DSH_CTF_CHROME_MCP_URL?.trim()
       || 'http://127.0.0.1:12306/mcp'
-    document.mcpServers['mcp-chrome'] = { url: chromeUrl }
+    const chromeStdio = await findCtfExecutable('mcp-chrome-stdio')
+    document.mcpServers['mcp-chrome'] = chromeStdio
+      ? { command: chromeStdio }
+      : { url: chromeUrl }
     configured.push('mcp.chrome')
   }
 

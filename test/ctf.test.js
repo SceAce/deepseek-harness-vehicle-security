@@ -252,7 +252,7 @@ test('ctf_mcp_configure writes key-only external MCP configuration without retur
   assert.deepEqual(result.requiredSecrets, [])
   assert.doesNotMatch(JSON.stringify(result), /test-tavily-secret/)
   const document = JSON.parse(await import('node:fs/promises').then(fs => fs.readFile(configPath, 'utf8')))
-  assert.equal(document.mcpServers['mcp-chrome'].url, 'http://127.0.0.1:12306/mcp')
+  assert.ok(document.mcpServers['mcp-chrome'].command || document.mcpServers['mcp-chrome'].url)
   assert.equal(document.mcpServers['tavily-mcp'].env.TAVILY_API_KEY, 'test-tavily-secret')
 })
 
