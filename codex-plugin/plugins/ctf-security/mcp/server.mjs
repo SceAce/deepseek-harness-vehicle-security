@@ -61,6 +61,35 @@ const tools = [
     },
   },
   {
+    name: 'ctf_re_r2_query',
+    description: 'Run bounded radare2 commands against a local artifact.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ...workspaceProperties,
+        path: { type: 'string' },
+        commands: { type: 'array', items: { type: 'string' } },
+      },
+      required: ['workspaceRoot', 'path'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'ctf_re_ida_script',
+    description: 'Generate a focused IDAPython script and optionally execute it in IDA batch mode.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ...workspaceProperties,
+        path: { type: 'string' },
+        focus: { type: 'string' },
+        execute: { type: 'boolean' },
+      },
+      required: ['workspaceRoot', 'path'],
+      additionalProperties: false,
+    },
+  },
+  {
     name: 'ctf_pwn_profile',
     description: 'Pwn binary profile using installed tools; returns mitigations, imports, strings, and next actions.',
     inputSchema: {
@@ -81,6 +110,22 @@ const tools = [
         argv: { type: 'array', items: { type: 'string' } },
         breakAt: { type: 'string' },
         extraGdbCommands: { type: 'array', items: { type: 'string' } },
+      },
+      required: ['workspaceRoot', 'path'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'ctf_pwn_gdb_probe',
+    description: 'Run a Pwndbg-oriented GDB batch probe on a local pwn binary.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ...workspaceProperties,
+        path: { type: 'string' },
+        argv: { type: 'array', items: { type: 'string' } },
+        breakAt: { type: 'string' },
+        extraCommands: { type: 'array', items: { type: 'string' } },
       },
       required: ['workspaceRoot', 'path'],
       additionalProperties: false,
@@ -165,6 +210,45 @@ const tools = [
         bodyB: { type: 'string' },
       },
       required: ['urlA', 'urlB'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'ctf_web_browser_probe',
+    description: 'Use local Chromium or Chrome headless mode to capture DOM and screenshot state.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        url: { type: 'string' },
+        captureScreenshot: { type: 'boolean' },
+      },
+      required: ['url'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'ctf_web_capture_probe',
+    description: 'Check mitmproxy capability and create an ordered human handoff for live HTTP(S) capture.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        listenHost: { type: 'string' },
+        listenPort: { type: 'integer', minimum: 1, maximum: 65535 },
+        webPort: { type: 'integer', minimum: 1, maximum: 65535 },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'ctf_tool_setup',
+    description: 'Create an ordered human setup request for local CTF tools or external MCP configuration.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        target: { type: 'string', enum: ['gdb_pwndbg', 'ida_pro', 'r2', 'chrome_devtools_mcp', 'mitmproxy', 'blackarch_repo'] },
+        context: { type: 'string' },
+      },
+      required: ['target'],
       additionalProperties: false,
     },
   },
@@ -269,6 +353,14 @@ async function callTool(name, args) {
       const { profileReArtifact } = await runtime('binary')
       return profileReArtifact(await workspaceFile(args), commandOptions)
     }
+    case 'ctf_re_r2_query': {
+      const { queryRadare2 } = await runtime('retools')
+      return queryRadare2(await workspaceFile(args), Array.isArray(args.commands) ? args.commands.map(String) : [], commandOptions)
+    }
+    case 'ctf_re_ida_script': {
+      const { buildIdaScriptPlan } = await runtime('retools')
+      return buildIdaScriptPlan(await workspaceFile(args), typeof args.focus === 'string' ? args.focus : '', args.execute === true, commandOptions)
+    }
     case 'ctf_pwn_profile': {
       const { profilePwnArtifact } = await runtime('binary')
       return profilePwnArtifact(await workspaceFile(args), commandOptions)
@@ -279,6 +371,14 @@ async function callTool(name, args) {
         argv: args.argv,
         breakAt: args.breakAt,
         extraGdbCommands: args.extraGdbCommands,
+      }, commandOptions)
+    }
+    case 'ctf_pwn_gdb_probe': {
+      const { debugPwndbgArtifact } = await runtime('binary')
+      return debugPwndbgArtifact(await workspaceFile(args), {
+        argv: args.argv,
+        breakAt: args.breakAt,
+        extraCommands: args.extraCommands,
       }, commandOptions)
     }
     case 'ctf_rop_search': {
@@ -322,6 +422,29 @@ async function callTool(name, args) {
         bodyA: args.bodyA,
         bodyB: args.bodyB,
       }, commandOptions)
+    }
+    case 'ctf_web_browser_probe': {
+      const { probeWebBrowser } = await runtime('web')
+      return probeWebBrowser({
+        url: requireString(args.url, 'url'),
+        captureScreenshot: args.captureScreenshot,
+      }, commandOptions)
+    }
+    case 'ctf_web_capture_probe': {
+      const { probeWebCapture } = await runtime('web')
+      return probeWebCapture({
+        listenHost: args.listenHost,
+        listenPort: args.listenPort,
+        webPort: args.webPort,
+      }, commandOptions)
+    }
+    case 'ctf_tool_setup': {
+      const { createToolSetupRequest } = await runtime('setup')
+      const target = requireString(args.target, 'target')
+      if (!['gdb_pwndbg', 'ida_pro', 'r2', 'chrome_devtools_mcp', 'mitmproxy', 'blackarch_repo'].includes(target)) {
+        throw new Error(`unknown setup target: ${target}`)
+      }
+      return createToolSetupRequest(target, typeof args.context === 'string' ? args.context : undefined)
     }
     case 'ctf_human_request': {
       const { createHumanRequest, operationsFromLegacySteps } = await runtime('human')

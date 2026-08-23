@@ -159,14 +159,20 @@ CTF 侧目标是工具优先：先审计本机能力、初检文件或 URL，再
 | `ctf_tool_audit` | 检查本机 CTF 能力：binutils、GDB、pwntools、Sage/Z3、tshark、curl 等 |
 | `ctf_artifact_profile` | 对文件做 hash、大小、magic、file 类型、熵和文本样本初检 |
 | `ctf_re_profile` | 用 `file/readelf/strings` 等工具提取逆向线索 |
+| `ctf_re_r2_query` | 调用本机 radare2 执行受限的 headless 命令并保留 JSON/原始输出 |
+| `ctf_re_ida_script` | 生成以 IDAPython 为主的函数、字符串和交叉引用分析脚本；可选 IDA batch 执行 |
 | `ctf_pwn_profile` | 提取 ELF 保护、导入、字符串、checksec 输出和后续调试/gadget 动作 |
 | `ctf_pwn_debug_probe` | 用 GDB batch 采集入口点、寄存器、栈、反汇编和回溯 |
+| `ctf_pwn_gdb_probe` | 用 GDB/Pwndbg 执行 `context`、`vmmap`、寄存器和回溯探针 |
 | `ctf_rop_search` | 调用 ROPgadget 或 ropper 搜索 gadget |
 | `ctf_crypto_probe` | 检测 hex/base64/binary-ascii、熵、hash 和单字节 XOR 候选 |
 | `ctf_misc_triage` | 用 binwalk、exiftool、7z、strings、zsteg 做 Misc/取证初检 |
 | `ctf_pcap_profile` | 用 tshark 汇总 PCAP 协议层级和 TCP/UDP 会话 |
 | `ctf_http_request` | 用 curl 发起结构化 HTTP 请求并返回状态、长度、hash 和预览 |
 | `ctf_http_diff` | 对比两次 HTTP 请求的状态、长度和响应 hash |
+| `ctf_web_browser_probe` | 用本机 Chromium/Chrome headless 获取 DOM、标题和截图 |
+| `ctf_web_capture_probe` | 检查 mitmproxy/mitmweb 并生成启动实时抓包的人工 MCP 请求 |
+| `ctf_tool_setup` | 生成 GDB/Pwndbg、IDA、r2、Chrome DevTools MCP、mitmproxy、BlackArch 的安装配置请求 |
 | `ctf_human_request` | 生成结构化人工动作请求，把用户当作可调用的电脑/环境 MCP |
 
 ### CTF Skills
@@ -181,6 +187,59 @@ $solve-ctf-web     -> Web 工具图
 `ctf_human_request` 要求模型先给出操作顺序，再给出每步的命令或指令；人类侧只回传 `log`、`screenshot` 或 `ocr_text`，不再依赖自由文本补充。
 
 `ctf_start` 还会返回结构化 `toolGraph`，其中包含当前类别的入口工具、节点、边和转移条件。RE、PWN、WEB 的图分别从 `ctf_re_profile`、`ctf_pwn_profile`、`ctf_http_request` 开始。
+
+### CTF 工具安装与外部 MCP
+
+CTF 插件只负责调用本机已安装程序、生成确定性脚本和检查外部 MCP 配置，不会假设 IDA Pro、r2 MCP、GDB MCP 或 Chrome DevTools MCP 已经存在。运行 `ctf_tool_audit` 可以看到：
+
+- `capabilities`：本机可执行文件和 Python 模块；
+- `mcp`：外部 MCP 是否在人工提供的配置中出现；
+- `recommendations`：缺少能力时应调用的工具或 setup 请求。
+
+需要人操作安装、启动长驻服务或编辑 MCP 客户端配置时，调用 `ctf_tool_setup`。每个 setup 请求都有严格的操作顺序；人类侧只返回 `log`、`screenshot` 或 `ocr_text`。
+
+外部 MCP 配置示例位于：
+
+```text
+codex-plugin/plugins/ctf-security/mcp.external.example.json
+```
+
+复制后补齐 IDA/r2/GDB-Pwndbg 的实际 MCP 启动命令，再通过以下环境变量让 `ctf_tool_audit` 检测：
+
+```bash
+export DSH_CTF_MCP_CONFIG="$PWD/ctf-mcp.json"
+# CTF_MCP_CONFIG 也可作为别名使用
+```
+
+仓库内置的 `.mcp.json` 只启动 CTF 自身的本地 MCP，不会替用户安装或启动外部服务器。Chrome DevTools MCP 的 setup 请求使用其官方 npm 启动方式；IDA、r2、GDB-Pwndbg 的 MCP 命令保留为占位符，因为这些服务器的发行方式和启动参数可能随实现不同。
+
+### 推荐工具分工
+
+| 工具 | 建议用途 | 插件行为 |
+| --- | --- | --- |
+| GDB + Pwndbg | Pwn 动态状态、堆、寄存器、映射 | `ctf_pwn_gdb_probe` 直接批处理调用 |
+| radare2 | CLI 逆向、JSON 画像、xrefs | `ctf_re_r2_query` 直接调用 |
+| IDA Pro + IDAPython | 深入函数、交叉引用、反编译器脚本 | `ctf_re_ida_script` 生成/可选执行脚本 |
+| Chromium/Chrome DevTools MCP | 页面、DOM、Console、网络和截图 | 本地先用 `ctf_web_browser_probe`，交互再接外部 MCP |
+| mitmproxy/mitmweb | 实时 HTTP(S) 拦截、重放和流量查看 | `ctf_web_capture_probe` 检查并交接长驻服务 |
+| TShark | 离线 PCAP 协议和会话统计 | `ctf_pcap_profile` |
+| pwntools、ROPgadget、ropper、checksec | Pwn 自动化、gadget 和保护检查 | 由 `ctf_tool_audit` 探测，缺失时再安装 |
+| patchelf、strace、ltrace、seccomp-tools | ELF 元数据、系统调用、库调用和 seccomp | 由 `ctf_tool_audit` 探测 |
+| ffuf、feroxbuster、httpx、sqlmap | Web 内容发现和结构化验证 | 由 `ctf_tool_audit` 探测；请求工具仍优先使用 curl |
+| Ghidra、angr、Z3、Sage、capa、FLOSS | 复杂反编译、符号执行、约束和样本画像 | 作为后续能力，先审计后调用 |
+
+官方安装/配置资料入口记录在源码和 setup 请求中，便于人工按当前发行版完成安装：
+
+```text
+https://pwndbg.re/
+https://github.com/pwndbg/pwndbg
+https://github.com/radareorg/radare2
+https://docs.hex-rays.com/
+https://github.com/ChromeDevTools/chrome-devtools-mcp
+https://docs.mitmproxy.org/
+https://www.wireshark.org/docs/man-pages/tshark.html
+https://blackarch.org/
+```
 
 ### 安装到 Harness Web profile
 

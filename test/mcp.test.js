@@ -157,14 +157,20 @@ test('Codex CTF MCP initializes, lists tools, and probes crypto text', async t =
     'ctf_artifact_profile',
     'ctf_start',
     'ctf_re_profile',
+    'ctf_re_r2_query',
+    'ctf_re_ida_script',
     'ctf_pwn_profile',
     'ctf_pwn_debug_probe',
+    'ctf_pwn_gdb_probe',
     'ctf_rop_search',
     'ctf_crypto_probe',
     'ctf_misc_triage',
     'ctf_pcap_profile',
     'ctf_http_request',
     'ctf_http_diff',
+    'ctf_web_browser_probe',
+    'ctf_web_capture_probe',
+    'ctf_tool_setup',
     'ctf_human_request',
   ])
 
@@ -181,6 +187,34 @@ test('Codex CTF MCP initializes, lists tools, and probes crypto text', async t =
   })
   assert.equal(reProfile.result.structuredContent.status, 'ok')
   assert.equal(reProfile.result.structuredContent.artifact.path, 'fixtures/sample.asc')
+
+  const r2 = await request('tools/call', {
+    name: 'ctf_re_r2_query',
+    arguments: { workspaceRoot: root, path: 'fixtures/sample.asc', commands: ['ij'] },
+  })
+  assert.equal(r2.result.structuredContent.status, 'ok')
+  assert.equal(r2.result.structuredContent.query.commands[0], 'ij')
+
+  const ida = await request('tools/call', {
+    name: 'ctf_re_ida_script',
+    arguments: { workspaceRoot: root, path: 'fixtures/sample.asc', focus: 'flag' },
+  })
+  assert.match(ida.result.structuredContent.script, /ida_funcs/)
+  assert.equal(ida.result.structuredContent.executed, false)
+
+  const gdb = await request('tools/call', {
+    name: 'ctf_pwn_gdb_probe',
+    arguments: { workspaceRoot: root, path: 'fixtures/sample.asc' },
+  })
+  assert.equal(gdb.result.isError, false)
+  assert.equal(gdb.result.structuredContent.debugger.frontend, 'pwndbg')
+
+  const setup = await request('tools/call', {
+    name: 'ctf_tool_setup',
+    arguments: { target: 'ida_pro' },
+  })
+  assert.equal(setup.result.structuredContent.status, 'human_required')
+  assert.ok(setup.result.structuredContent.request.operationOrder.every(operation => operation.command || operation.instruction))
 
   const humanRequest = await request('tools/call', {
     name: 'ctf_human_request',

@@ -1,0 +1,36 @@
+{
+  "mcpServers": {
+    "chrome-devtools": {
+      "command": "npx",
+      "args": [
+        "--yes",
+        "chrome-devtools-mcp@latest"
+      ]
+    },
+    "ida-pro": {
+      "command": "REPLACE_WITH_IDA_MCP_COMMAND",
+      "args": [
+        "REPLACE_WITH_IDA_MCP_ARGUMENT"
+      ],
+      "env": {
+        "IDA_PATH": "REPLACE_WITH_IDA_INSTALLATION_PATH"
+      }
+    },
+    "r2": {
+      "command": "REPLACE_WITH_R2_MCP_COMMAND",
+      "args": [
+        "REPLACE_WITH_R2_MCP_ARGUMENT"
+      ]
+    },
+    "gdb-pwndbg": {
+      "command": "REPLACE_WITH_GDB_PWNDDBG_MCP_COMMAND",
+      "args": [
+        "REPLACE_WITH_GDB_PWNDDBG_MCP_ARGUMENT"
+      ],
+      "env": {
+        "GDB_PATH": "gdb",
+        "PWNDBG_PATH": "REPLACE_WITH_PWNDGBG_PATH_OR_EMPTY"
+      }
+    }
+  }
+}

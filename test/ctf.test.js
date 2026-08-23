@@ -26,12 +26,18 @@ const CTF_TOOL_NAMES = [
   'ctf_re_profile',
   'ctf_pwn_profile',
   'ctf_pwn_debug_probe',
+  'ctf_pwn_gdb_probe',
+  'ctf_re_r2_query',
+  'ctf_re_ida_script',
   'ctf_rop_search',
   'ctf_crypto_probe',
   'ctf_misc_triage',
   'ctf_pcap_profile',
   'ctf_http_request',
   'ctf_http_diff',
+  'ctf_web_browser_probe',
+  'ctf_web_capture_probe',
+  'ctf_tool_setup',
   'ctf_human_request',
 ]
 
@@ -148,6 +154,77 @@ test('ctf_pwn_profile returns structured binary facts for an ELF artifact', asyn
   assert.ok(result.nextActions.some(action => action.tool === 'ctf_pwn_debug_probe'))
 })
 
+test('ctf_pwn_gdb_probe calls local GDB with Pwndbg commands', async t => {
+  const workspace = await mkdtemp(path.join(os.tmpdir(), 'dsh-ctf-pwndbg-'))
+  t.after(() => import('node:fs/promises').then(fs => fs.rm(workspace, { recursive: true, force: true })))
+  await copyFile('/bin/true', path.join(workspace, 'chall'))
+
+  const registered = []
+  ctfPlugin.apply({ tools: { register: tool => registered.push(tool) } }, {
+    ...config,
+    workspaceRoot: undefined,
+    commandTimeoutMs: 5000,
+  })
+  const probe = registered.find(item => item.name === 'ctf_pwn_gdb_probe')
+  const result = await probe.execute(
+    { path: 'chall' },
+    {
+      signal: new AbortController().signal,
+      agent: { session: { header: { cwd: workspace } } },
+    },
+  )
+
+  assert.equal(result.status, 'ok')
+  assert.equal(result.debugger.frontend, 'pwndbg')
+  assert.match(result.debugger.output, /pwndbg/i)
+  assert.ok(result.commands.some(command => command.executable.endsWith('/gdb')))
+})
+
+test('ctf_re_r2_query executes local radare2 and ctf_re_ida_script remains useful without IDA', async t => {
+  const workspace = await mkdtemp(path.join(os.tmpdir(), 'dsh-ctf-retools-'))
+  t.after(() => import('node:fs/promises').then(fs => fs.rm(workspace, { recursive: true, force: true })))
+  await copyFile('/bin/true', path.join(workspace, 'chall'))
+
+  const registered = []
+  ctfPlugin.apply({ tools: { register: tool => registered.push(tool) } }, {
+    ...config,
+    workspaceRoot: undefined,
+    commandTimeoutMs: 5000,
+  })
+  const r2Tool = registered.find(item => item.name === 'ctf_re_r2_query')
+  const idaTool = registered.find(item => item.name === 'ctf_re_ida_script')
+  const execution = {
+    signal: new AbortController().signal,
+    agent: { session: { header: { cwd: workspace } } },
+  }
+  const r2 = await r2Tool.execute({ path: 'chall', commands: ['ij'] }, execution)
+  const ida = await idaTool.execute({ path: 'chall', focus: 'flag strcmp' }, execution)
+
+  assert.equal(r2.status, 'ok')
+  assert.equal(r2.query.commands[0], 'ij')
+  assert.ok(r2.rawOutput)
+  assert.match(ida.script, /ida_funcs/)
+  assert.match(ida.script, /collect_xrefs/)
+  assert.equal(ida.executed, false)
+  assert.ok(['ok', 'missing_capability'].includes(ida.status))
+})
+
+test('ctf_tool_audit exposes local capability and external MCP state', async () => {
+  const registered = []
+  ctfPlugin.apply({ tools: { register: tool => registered.push(tool) } }, {
+    ...config,
+    commandTimeoutMs: 5000,
+  })
+  const auditTool = registered.find(item => item.name === 'ctf_tool_audit')
+  const result = await auditTool.execute({}, { signal: new AbortController().signal })
+
+  assert.ok(Array.isArray(result.capabilities))
+  assert.ok(Array.isArray(result.mcp))
+  assert.ok(result.mcp.some(item => item.id === 'mcp.ida_pro'))
+  assert.ok(result.capabilities.some(item => item.id === 're.r2'))
+  assert.ok(result.capabilities.some(item => item.id === 'pwn.pwndbg'))
+})
+
 test('ctf_crypto_probe detects simple hex text before script generation', async () => {
   const registered = []
   ctfPlugin.apply({ tools: { register: tool => registered.push(tool) } }, config)
@@ -196,6 +273,66 @@ test('ctf_http_request and ctf_http_diff work against a local HTTP service', asy
   assert.equal(compared.diff.bodyHashChanged, true)
 
   server.close()
+})
+
+test('ctf_web_browser_probe makes a real local browser invocation', async t => {
+  const server = createServer((_req, res) => {
+    res.writeHead(200, { 'content-type': 'text/html' })
+    res.end('<title>DSH CTF</title><main>browser probe</main>')
+  })
+  server.listen(0, '127.0.0.1')
+  await once(server, 'listening')
+  t.after(() => server.close())
+  const address = server.address()
+  const port = typeof address === 'object' && address ? address.port : null
+  assert.ok(port)
+
+  const registered = []
+  ctfPlugin.apply({ tools: { register: tool => registered.push(tool) } }, {
+    ...config,
+    commandTimeoutMs: 10000,
+  })
+  const browser = registered.find(item => item.name === 'ctf_web_browser_probe')
+  const result = await browser.execute(
+    { url: `http://127.0.0.1:${port}/`, captureScreenshot: false },
+    { signal: new AbortController().signal },
+  )
+
+  assert.ok(result.browser)
+  assert.equal(result.url, `http://127.0.0.1:${port}/`)
+  assert.ok(result.commands.length >= 1)
+  assert.ok(['ok', 'failed'].includes(result.status))
+})
+
+test('ctf_web_capture_probe reports proxy capability or setup handoff', async () => {
+  const registered = []
+  ctfPlugin.apply({ tools: { register: tool => registered.push(tool) } }, {
+    ...config,
+    commandTimeoutMs: 5000,
+  })
+  const capture = registered.find(item => item.name === 'ctf_web_capture_probe')
+  const result = await capture.execute({}, { signal: new AbortController().signal })
+
+  assert.ok(['ok', 'human_required', 'missing_capability', 'failed'].includes(result.status))
+  if (result.proxy) {
+    assert.match(result.launchCommand, /mitm/)
+    assert.ok(result.humanRequired.length > 0)
+  } else {
+    assert.ok(result.nextActions.some(action => action.tool === 'ctf_tool_setup'))
+  }
+})
+
+test('ctf_tool_setup enforces ordered human operations and return types', async () => {
+  const registered = []
+  ctfPlugin.apply({ tools: { register: tool => registered.push(tool) } }, config)
+  const setup = registered.find(item => item.name === 'ctf_tool_setup')
+  const result = await setup.execute({ target: 'chrome_devtools_mcp' }, { signal: new AbortController().signal })
+
+  assert.equal(result.status, 'human_required')
+  assert.ok(result.request.operationOrder.length >= 2)
+  assert.ok(result.request.operationOrder.every(operation => operation.command || operation.instruction))
+  assert.deepEqual(result.request.acceptedReturnTypes, ['log', 'screenshot', 'ocr_text'])
+  assert.deepEqual(result.request.returnContract.onlyReturn, ['log', 'screenshot', 'ocr_text'])
 })
 
 test('ctf_start returns structured human request for web service gaps', async () => {
