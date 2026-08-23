@@ -1,7 +1,7 @@
 interface:
   display_name: "Solve CTF Web"
   short_description: "Tool-first web challenge workflow"
-  default_prompt: "Use $solve-ctf-web, call ctf_start or ctf_http_request first, then compare response diffs before writing custom web code."
+  default_prompt: "Use $solve-ctf-web, call ctf_tool_audit first, prefer mcp-chrome for interactive browser state and Tavily for CVE/version research, then compare request diffs before writing custom web code."
 
 dependencies:
   tools:

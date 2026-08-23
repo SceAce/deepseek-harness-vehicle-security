@@ -1,11 +1,17 @@
 {
   "mcpServers": {
-    "chrome-devtools": {
+    "mcp-chrome": {
+      "command": "mcp-chrome-stdio"
+    },
+    "tavily-mcp": {
       "command": "npx",
       "args": [
-        "--yes",
-        "chrome-devtools-mcp@latest"
-      ]
+        "-y",
+        "tavily-mcp@latest"
+      ],
+      "env": {
+        "TAVILY_API_KEY": "REPLACE_WITH_TAVILY_API_KEY"
+      }
     },
     "ida-pro": {
       "command": "REPLACE_WITH_IDA_MCP_COMMAND",
@@ -27,10 +33,10 @@
       "args": [
         "REPLACE_WITH_GDB_PWNDDBG_MCP_ARGUMENT"
       ],
-        "env": {
-          "GDB_PATH": "gdb",
-          "PWNDBG_PATH": "REPLACE_WITH_PWNDBG_PATH_OR_EMPTY"
-        }
+      "env": {
+        "GDB_PATH": "gdb",
+        "PWNDBG_PATH": "REPLACE_WITH_PWNDBG_PATH_OR_EMPTY"
+      }
     }
   }
 }

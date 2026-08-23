@@ -1,7 +1,7 @@
 interface:
   display_name: "Solve CTF RE"
   short_description: "Tool-first reverse-engineering CTF workflow"
-  default_prompt: "Use $solve-ctf-re, call ctf_start or ctf_re_profile first, then follow the nextActions and tool graph."
+  default_prompt: "Use $solve-ctf-re, call ctf_tool_audit first, prefer configured IDA MCP and local IDAPython scripts, then follow the nextActions and tool graph."
 
 dependencies:
   tools:

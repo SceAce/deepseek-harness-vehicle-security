@@ -313,8 +313,13 @@ function recommendations(capabilities, modules, mcp) {
         result.push('Install strace or ltrace for runtime syscall/library tracing.');
     if (!available.has('web.curl') && !available.has('python.requests'))
         result.push('Install curl or requests for web challenge baselines.');
-    if (!available.has('web.chromium') && !mcp.some(item => item.id === 'mcp.chrome' && item.configured)) {
-        result.push('Install Chromium/Chrome for the local headless fallback, or use the configured mcp-chrome browser server.');
+    if (!available.has('web.chromium')
+        && !available.has('web.mcp_chrome_bridge')
+        && !mcp.some(item => item.id === 'mcp.chrome' && item.configured)) {
+        result.push('Install Chromium/Chrome for the local headless fallback, or install/configure the mcp-chrome browser bridge.');
+    }
+    else if (!mcp.some(item => item.id === 'mcp.chrome' && item.configured)) {
+        result.push('Configure the detected mcp-chrome bridge before interactive browser operations.');
     }
     if (!available.has('misc.tshark'))
         result.push('Install tshark for PCAP triage.');

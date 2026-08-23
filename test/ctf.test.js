@@ -229,6 +229,7 @@ test('ctf_tool_audit exposes local capability and external MCP state', async () 
   assert.ok(result.mcp.some(item => item.id === 'mcp.tavily'))
   assert.ok(result.capabilities.some(item => item.id === 're.r2'))
   assert.ok(result.capabilities.some(item => item.id === 'pwn.pwndbg'))
+  assert.ok(result.capabilities.some(item => item.id === 'web.mcp_chrome_bridge'))
   assert.match(result.python.executable ?? '', /python/)
   assert.ok('source' in result.python)
   assert.ok('venv' in result.python)
@@ -254,6 +255,24 @@ test('ctf_mcp_configure writes key-only external MCP configuration without retur
   const document = JSON.parse(await import('node:fs/promises').then(fs => fs.readFile(configPath, 'utf8')))
   assert.ok(document.mcpServers['mcp-chrome'].command || document.mcpServers['mcp-chrome'].url)
   assert.equal(document.mcpServers['tavily-mcp'].env.TAVILY_API_KEY, 'test-tavily-secret')
+})
+
+test('ctf_mcp_configure asks only for the Tavily key when it is missing', async t => {
+  const configPath = path.join(await mkdtemp(path.join(os.tmpdir(), 'dsh-ctf-mcp-missing-')), 'ctf-mcp.json')
+  t.after(() => import('node:fs/promises').then(fs => fs.rm(path.dirname(configPath), { recursive: true, force: true })))
+  const registered = []
+  ctfPlugin.apply({ tools: { register: tool => registered.push(tool) } }, config)
+  const configure = registered.find(item => item.name === 'ctf_mcp_configure')
+  const result = await configure.execute({
+    configPath,
+    includeChrome: false,
+    includeTavily: true,
+  }, { signal: new AbortController().signal })
+
+  assert.equal(result.status, 'missing_capability')
+  assert.deepEqual(result.configured, [])
+  assert.deepEqual(result.requiredSecrets, ['TAVILY_API_KEY'])
+  assert.match(result.limitations[0], /TAVILY_API_KEY/)
 })
 
 test('ctf_crypto_probe detects simple hex text before script generation', async () => {

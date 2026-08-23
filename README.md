@@ -157,6 +157,7 @@ CTF 侧目标是工具优先：先审计本机能力、初检文件或 URL，再
 | --- | --- |
 | `ctf_start` | CTF 第一入口：审计本机能力、初检附件、判断 RE/Pwn/Crypto/Misc/Web，并给出下一步工具 |
 | `ctf_tool_audit` | 检查本机 CTF 能力：binutils、GDB、pwntools、Sage/Z3、tshark、curl 等 |
+| `ctf_mcp_configure` | 自动生成 CTF 外部 MCP 配置；只接收 `TAVILY_API_KEY` 等 secret，不要求手写 JSON 或路径 |
 | `ctf_artifact_profile` | 对文件做 hash、大小、magic、file 类型、熵和文本样本初检 |
 | `ctf_re_profile` | 用 `file/readelf/strings` 等工具提取逆向线索 |
 | `ctf_re_r2_query` | 调用本机 radare2 执行受限的 headless 命令并保留 JSON/原始输出 |
@@ -172,7 +173,7 @@ CTF 侧目标是工具优先：先审计本机能力、初检文件或 URL，再
 | `ctf_http_diff` | 对比两次 HTTP 请求的状态、长度和响应 hash |
 | `ctf_web_browser_probe` | 用本机 Chromium/Chrome headless 获取 DOM、标题和截图 |
 | `ctf_web_capture_probe` | 检查 mitmproxy/mitmweb 并生成启动实时抓包的人工 MCP 请求 |
-| `ctf_tool_setup` | 生成 GDB/Pwndbg、IDA、r2、Chrome DevTools MCP、mitmproxy、BlackArch 的安装配置请求 |
+| `ctf_tool_setup` | 生成 GDB/Pwndbg、IDA、r2、mcp-chrome、mitmproxy、Python CTF 环境和 BlackArch 的安装配置请求 |
 | `ctf_human_request` | 生成结构化人工动作请求，把用户当作可调用的电脑/环境 MCP |
 
 ### CTF Skills
@@ -190,11 +191,24 @@ $solve-ctf-web     -> Web 工具图
 
 ### CTF 工具安装与外部 MCP
 
-CTF 插件只负责调用本机已安装程序、生成确定性脚本和检查外部 MCP 配置，不会假设 IDA Pro、r2 MCP、GDB MCP 或 Chrome DevTools MCP 已经存在。运行 `ctf_tool_audit` 可以看到：
+CTF 插件只调用本机已安装程序、生成确定性脚本、检查外部 MCP 配置，并与车联网插件保持独立。运行 `ctf_tool_audit` 可以看到：
 
 - `capabilities`：本机可执行文件和 Python 模块；
+- `python`：实际选中的 Python、来源、venv 和 `bin` 路径；
 - `mcp`：外部 MCP 是否在人工提供的配置中出现；
 - `recommendations`：缺少能力时应调用的工具或 setup 请求。
+
+Python 工具优先使用：
+
+```text
+/home/source/tools/PyVenv/CTF/bin/python
+DSH_CTF_PYTHON
+$VIRTUAL_ENV/bin/python
+<workspace>/.venv/bin/python
+PATH 中的 python3/python
+```
+
+因此在 CTF Python 环境中安装的新库会自动进入工具审计和命令搜索路径。当前环境已经检测到 pwntools、Z3、SymPy、PyCryptodome、gmpy2、requests、Pillow、Unicorn、Capstone、LIEF 和 BeautifulSoup；缺失的 Scapy、angr、Playwright 等会以推荐项显示。
 
 需要人操作安装、启动长驻服务或编辑 MCP 客户端配置时，调用 `ctf_tool_setup`。每个 setup 请求都有严格的操作顺序；人类侧只返回 `log`、`screenshot` 或 `ocr_text`。
 
@@ -211,7 +225,32 @@ export DSH_CTF_MCP_CONFIG="$PWD/ctf-mcp.json"
 # CTF_MCP_CONFIG 也可作为别名使用
 ```
 
-仓库内置的 `.mcp.json` 只启动 CTF 自身的本地 MCP，不会替用户安装或启动外部服务器。Chrome DevTools MCP 的 setup 请求使用其官方 npm 启动方式；IDA、r2、GDB-Pwndbg 的 MCP 命令保留为占位符，因为这些服务器的发行方式和启动参数可能随实现不同。
+更简单的方式是直接调用 `ctf_mcp_configure`：
+
+```text
+调用 ctf_mcp_configure。
+如果 Tavily 尚未配置，只向我索取 TAVILY_API_KEY；不要让我手写 JSON、MCP command、路径或 env。
+```
+
+推荐初始化顺序：
+
+```text
+1. 调用 ctf_tool_audit。
+2. 调用 ctf_mcp_configure；只在结果包含 requiredSecrets 时索取对应 key。
+3. 如果 mcp-chrome 尚未连接，调用 ctf_tool_setup(target="chrome_mcp")，按顺序执行 doctor、权限修复、浏览器注册、扩展连接和 ping。
+4. 重启 DSH/MCP host 后再次调用 ctf_tool_audit，确认 mcp.chrome 和 mcp.tavily 状态。
+```
+
+默认行为：
+
+- `mcp-chrome` 优先写入本机已发现的 `mcp-chrome-stdio`，否则写入 `http://127.0.0.1:12306/mcp`；如果本机 bridge 使用其他端口，只填 `chromeUrl`；
+- Tavily 写入 `npx -y tavily-mcp@latest`，只从工具参数或 `TAVILY_API_KEY` 环境变量读取 key；
+- IDA MCP、r2 MCP、GDB/Pwndbg MCP 保留为外部服务器，由本机已有配置提供；
+- `ctf_tool_audit` 只报告 configured/未 configured，不回显 key、完整 env 或敏感配置内容；
+- 配置文件默认写入 `~/.config/dsh/ctf-mcp.json`，也可以通过 `DSH_CTF_MCP_CONFIG` 或 `configPath` 指定；
+- 仓库内置的 `.mcp.json` 只启动 CTF 自身的本地 MCP，不会把外部 server 与车联网插件混在一起。
+
+模型的默认调用顺序是：先 `ctf_tool_audit`，再根据工具图选择本机工具或外部 MCP。IDA MCP 已配置时不要求安装 IDA CLI；`ctf_re_ida_script` 仍然负责生成 IDAPython，CLI 仅用于需要 batch 执行的场景。Web 交互优先使用 `mcp-chrome`，无 MCP 时才回退到本机 Chromium/Chrome headless；CVE、漏洞版本和依赖资料优先使用 Tavily MCP。
 
 ### 推荐工具分工
 
@@ -220,7 +259,8 @@ export DSH_CTF_MCP_CONFIG="$PWD/ctf-mcp.json"
 | GDB + Pwndbg | Pwn 动态状态、堆、寄存器、映射 | `ctf_pwn_gdb_probe` 直接批处理调用 |
 | radare2 | CLI 逆向、JSON 画像、xrefs | `ctf_re_r2_query` 直接调用 |
 | IDA Pro + IDAPython | 深入函数、交叉引用、反编译器脚本 | `ctf_re_ida_script` 生成/可选执行脚本 |
-| Chromium/Chrome DevTools MCP | 页面、DOM、Console、网络和截图 | 本地先用 `ctf_web_browser_probe`，交互再接外部 MCP |
+| mcp-chrome | 页面、DOM、Console、网络、标签页、Cookie 和截图 | 交互浏览器主路径；不可用时回退 `ctf_web_browser_probe` |
+| Tavily MCP | CVE、漏洞版本、框架/依赖资料搜索与页面提取 | 按需调用；只需提供 `TAVILY_API_KEY` |
 | mitmproxy/mitmweb | 实时 HTTP(S) 拦截、重放和流量查看 | `ctf_web_capture_probe` 检查并交接长驻服务 |
 | TShark | 离线 PCAP 协议和会话统计 | `ctf_pcap_profile` |
 | pwntools、ROPgadget、ropper、checksec | Pwn 自动化、gadget 和保护检查 | 由 `ctf_tool_audit` 探测，缺失时再安装 |
@@ -235,7 +275,8 @@ https://pwndbg.re/
 https://github.com/pwndbg/pwndbg
 https://github.com/radareorg/radare2
 https://docs.hex-rays.com/
-https://github.com/ChromeDevTools/chrome-devtools-mcp
+https://github.com/hangwin/mcp-chrome
+https://app.tavily.com/
 https://docs.mitmproxy.org/
 https://www.wireshark.org/docs/man-pages/tshark.html
 https://blackarch.org/

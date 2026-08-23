@@ -1,6 +1,6 @@
 {
   "name": "ctf-security",
-  "version": "0.1.0+codex.20260823000000",
+  "version": "0.1.0+codex.20260823082300",
   "description": "Tool-first CTF triage and local capability routing for Codex",
   "author": {
     "name": "SceAce"
@@ -23,7 +23,7 @@
       "Pwn tool graph",
       "Web tool graph"
     ],
-    "defaultPrompt": "Use $investigate-ctf, $solve-ctf-re, $solve-ctf-pwn, or $solve-ctf-web as appropriate; call ctf_start or ctf_tool_audit before writing scripts, then follow the recommended CTF tool."
+    "defaultPrompt": "For every CTF task, call ctf_tool_audit first. Prefer /home/source/tools/PyVenv/CTF/bin/python and its installed modules, use mcp-chrome for interactive browser work, use Tavily MCP for CVE/version research, and use the configured IDA MCP instead of requiring IDA CLI. Write a new script only after the audit and available MCPs leave a concrete gap; use ctf_mcp_configure when only a key such as TAVILY_API_KEY is needed."
   },
   "repository": "https://github.com/SceAce/deepseek-harness-vehicle-security",
   "keywords": [
