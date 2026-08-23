@@ -127,6 +127,8 @@ test('ctf_re_profile returns structured facts for an ELF artifact', async t => {
 
   assert.equal(result.artifact.path, 'chall')
   assert.equal(result.binary.format, 'elf')
+  assert.ok(result.nextActions.some(action => action.tool === 'ctf_re_r2_query'))
+  assert.ok(result.nextActions.some(action => action.tool === 'ctf_re_ida_script'))
   assert.ok(result.nextActions.some(action => action.tool === 'ctf_crypto_probe'))
 })
 
@@ -151,6 +153,7 @@ test('ctf_pwn_profile returns structured binary facts for an ELF artifact', asyn
 
   assert.equal(result.artifact.path, 'chall')
   assert.equal(result.binary.format, 'elf')
+  assert.ok(result.nextActions.some(action => action.tool === 'ctf_pwn_gdb_probe'))
   assert.ok(result.nextActions.some(action => action.tool === 'ctf_pwn_debug_probe'))
 })
 
@@ -270,6 +273,8 @@ test('ctf_http_request and ctf_http_diff work against a local HTTP service', asy
 
   assert.equal(left.status, 'ok')
   assert.equal(left.response.statusCode, 200)
+  assert.ok(left.nextActions.some(action => action.tool === 'ctf_web_browser_probe'))
+  assert.ok(left.nextActions.some(action => action.tool === 'ctf_web_capture_probe'))
   assert.equal(compared.diff.bodyHashChanged, true)
 
   server.close()

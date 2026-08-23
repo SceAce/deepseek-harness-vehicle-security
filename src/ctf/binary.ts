@@ -332,6 +332,7 @@ function stringTags(value: string): string[] {
 
 function pwnNextActions(artifact: CtfArtifactProfile, binary: BinaryFactSummary): CtfNextAction[] {
   const actions: CtfNextAction[] = [
+    { tool: 'ctf_pwn_gdb_probe', args: { path: artifact.path }, reason: 'Use the installed GDB/Pwndbg path first for runtime context before writing debugger code.' },
     { tool: 'ctf_pwn_debug_probe', args: { path: artifact.path }, reason: 'Collect register, entrypoint, stack, and mapping context under gdb.' },
   ]
   if (binary.protections.nx !== 'disabled') {
@@ -345,6 +346,8 @@ function pwnNextActions(artifact: CtfArtifactProfile, binary: BinaryFactSummary)
 
 function reNextActions(artifact: CtfArtifactProfile, binary: BinaryFactSummary): CtfNextAction[] {
   const actions: CtfNextAction[] = [
+    { tool: 'ctf_re_r2_query', args: { path: artifact.path, commands: ['aaa', 'ij', 'afl'] }, reason: 'Use radare2 headless analysis and JSON metadata before generating custom reverse-engineering code.' },
+    { tool: 'ctf_re_ida_script', args: { path: artifact.path, focus: binary.interestingStrings.slice(0, 8).map(item => item.value).join(' ') }, reason: 'Generate a focused IDAPython script for functions, strings, and xrefs when deeper RE evidence is needed.' },
     { tool: 'ctf_crypto_probe', args: { path: artifact.path }, reason: 'Check whether extracted constants or text point to a common encoding or crypto path.' },
   ]
   if (binary.imports.some(name => ['strcmp', 'strncmp', 'memcmp'].includes(name))) {

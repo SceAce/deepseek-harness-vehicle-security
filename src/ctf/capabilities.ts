@@ -297,7 +297,7 @@ async function probeMcpConfiguration(): Promise<CtfMcpCapability[]> {
   ]
 
   return definitions.map(definition => {
-    const matchedName = definition.names.find(name => Object.prototype.hasOwnProperty.call(configuredServers, name))
+    const matchedName = definition.names.find(name => isConfiguredServer(configuredServers[name]))
     const envKey = `DSH_CTF_${definition.id.slice(4).toUpperCase().replaceAll('.', '_')}_MCP`
     const envValue = process.env[envKey]?.trim()
     return {
@@ -312,6 +312,17 @@ async function probeMcpConfiguration(): Promise<CtfMcpCapability[]> {
   })
 }
 
+function isConfiguredServer(value: unknown): boolean {
+  if (value === undefined || value === null) return false
+  if (typeof value === 'string') return value.trim() !== '' && !value.startsWith('REPLACE_WITH_')
+  if (typeof value !== 'object') return false
+  const command = (value as { command?: unknown }).command
+  if (typeof command !== 'string' || command.trim() === '' || command.startsWith('REPLACE_WITH_')) return false
+  const args = (value as { args?: unknown }).args
+  if (Array.isArray(args) && args.some(item => typeof item === 'string' && item.startsWith('REPLACE_WITH_'))) return false
+  return true
+}
+
 function firstLine(stdout: string, stderr: string): string | null {
   return `${stdout}\n${stderr}`.split(/\r?\n/).map(line => line.trim()).find(Boolean) ?? null
 }
@@ -321,6 +332,7 @@ function recommendations(capabilities: CtfCapability[], modules: CtfCapability[]
   const result: string[] = []
   if (!available.has('core.file')) result.push('Install file for reliable artifact type detection.')
   if (!available.has('re.readelf')) result.push('Install binutils for ELF analysis.')
+  if (!available.has('re.r2')) result.push('Install radare2 for fast headless RE queries and JSON output.')
   if (!available.has('pwn.gdb')) result.push('Install gdb for pwn runtime probes.')
   if (!available.has('pwn.pwndbg')) result.push('Configure pwndbg inside gdb for context, vmmap, heap, and register views.')
   if (!available.has('python.pwntools')) result.push('Install pwntools for pwn process automation.')
