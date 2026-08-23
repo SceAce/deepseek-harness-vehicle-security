@@ -335,11 +335,17 @@ function recommendations(capabilities: CtfCapability[], modules: CtfCapability[]
   if (!available.has('re.r2')) result.push('Install radare2 for fast headless RE queries and JSON output.')
   if (!available.has('pwn.gdb')) result.push('Install gdb for pwn runtime probes.')
   if (!available.has('pwn.pwndbg')) result.push('Configure pwndbg inside gdb for context, vmmap, heap, and register views.')
+  if (!available.has('pwn.checksec')) result.push('Install checksec for a concise mitigation summary.')
   if (!available.has('python.pwntools')) result.push('Install pwntools for pwn process automation.')
+  if (!available.has('pwn.ropgadget') && !available.has('pwn.ropper')) result.push('Install ROPgadget or ropper for gadget enumeration.')
   if (!available.has('re.ida_cli')) result.push('Expose IDA idat64/idat on PATH for IDAPython batch scripts.')
+  if (!available.has('re.patchelf')) result.push('Install patchelf for ELF interpreter and RPATH inspection.')
+  if (!available.has('re.strace') && !available.has('re.ltrace')) result.push('Install strace or ltrace for runtime syscall/library tracing.')
   if (!available.has('web.curl') && !available.has('python.requests')) result.push('Install curl or requests for web challenge baselines.')
+  if (!available.has('web.chromium')) result.push('Install Chromium or Google Chrome for rendered browser probes.')
   if (!available.has('misc.tshark')) result.push('Install tshark for PCAP triage.')
   if (!available.has('web.mitmproxy')) result.push('Install mitmproxy for live HTTP(S) capture; tshark remains the offline PCAP tool.')
+  if (!available.has('web.ffuf') && !available.has('web.feroxbuster')) result.push('Install ffuf or feroxbuster for controlled Web content discovery.')
   if (!available.has('crypto.sage') && !available.has('python.z3') && !available.has('python.sympy')) {
     result.push('Install Sage, z3, or SymPy for crypto challenge solving.')
   }
