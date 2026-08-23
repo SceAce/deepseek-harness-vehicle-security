@@ -3,13 +3,15 @@ import Schema from '@deepseek-ai/schemastery'
 import { defineTool, type JsonValue } from '@deepseek-ai/dsh-tools'
 import { resolveWorkspaceFile } from '../paths.js'
 import { profileCtfArtifact } from './artifact.js'
-import { debugPwnArtifact, profilePwnArtifact, profileReArtifact, searchRopGadgets } from './binary.js'
+import { debugPwnArtifact, debugPwndbgArtifact, profilePwnArtifact, profileReArtifact, searchRopGadgets } from './binary.js'
 import { auditCtfTools } from './capabilities.js'
 import { probeCryptoInput } from './crypto.js'
 import { createHumanRequest, operationsFromLegacySteps } from './human.js'
 import { profilePcapArtifact, triageMiscArtifact } from './misc.js'
 import { routeCtfStart } from './router.js'
-import { httpDiff, httpRequest } from './web.js'
+import { buildIdaScriptPlan, queryRadare2 } from './retools.js'
+import { createToolSetupRequest, type CtfSetupTarget } from './setup.js'
+import { httpDiff, httpRequest, probeWebBrowser, probeWebCapture } from './web.js'
 import { emptyResult, type CtfHumanOperation, type CtfHumanReturnType } from './types.js'
 
 export const name = 'ctf-tools'
@@ -120,6 +122,7 @@ export function apply(ctx: Context, config: Config): void {
         artifact: profile?.artifact ?? null,
         availableCapabilities: audit.capabilities.filter(item => item.available).map(item => item.id),
         availablePythonModules: audit.python.modules.filter(item => item.available).map(item => item.id),
+        mcp: audit.mcp,
         recommendedTool: decision.recommendedTool,
         recommendedArgs: decision.recommendedArgs,
         toolGraph: decision.toolGraph,
@@ -188,6 +191,61 @@ export function apply(ctx: Context, config: Config): void {
         breakAt: args.breakAt,
         extraGdbCommands: args.extraGdbCommands,
       }, { ...commandOptions, signal: exec.signal }) as unknown as Promise<JsonValue>
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'ctf_pwn_gdb_probe',
+    description: 'Run a Pwndbg-oriented GDB batch probe with context, vmmap, registers, and backtrace commands. Use this before writing a pwn debugger script.',
+    parameters: {
+      path: { type: 'string', required: true, description: 'Binary path relative to the active workspace' },
+      argv: { type: 'array', items: { type: 'string' }, description: 'Optional process argv values' },
+      breakAt: { type: 'string', description: 'Optional breakpoint symbol or address' },
+      extraCommands: { type: 'array', items: { type: 'string' }, description: 'Optional extra bounded GDB/Pwndbg commands' },
+    },
+    output: jsonOutput,
+    timeoutMs: config.commandTimeoutMs * 2,
+    isConcurrencySafe: () => true,
+    async execute(args, exec) {
+      const file = await workspaceFile(config, exec, args.path)
+      return debugPwndbgArtifact(file, {
+        argv: args.argv,
+        breakAt: args.breakAt,
+        extraCommands: args.extraCommands,
+      }, { ...commandOptions, signal: exec.signal }) as unknown as Promise<JsonValue>
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'ctf_re_r2_query',
+    description: 'Run bounded radare2 commands against a local artifact and return raw output plus the last parseable JSON result.',
+    parameters: {
+      path: { type: 'string', required: true, description: 'Artifact path relative to the active workspace' },
+      commands: { type: 'array', items: { type: 'string' }, description: 'Ordered r2 commands; defaults to aaa and ij' },
+    },
+    output: jsonOutput,
+    timeoutMs: config.commandTimeoutMs * 2,
+    isConcurrencySafe: () => true,
+    async execute(args, exec) {
+      const file = await workspaceFile(config, exec, args.path)
+      return queryRadare2(file, args.commands ?? [], { ...commandOptions, signal: exec.signal }) as unknown as Promise<JsonValue>
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'ctf_re_ida_script',
+    description: 'Generate a focused IDAPython script for functions, strings, and xrefs, and optionally execute it in IDA batch mode when an IDA CLI is installed.',
+    parameters: {
+      path: { type: 'string', required: true, description: 'Artifact path relative to the active workspace' },
+      focus: { type: 'string', description: 'Optional terms used to filter strings and guide the generated script' },
+      execute: { type: 'boolean', description: 'Execute the generated script when IDA CLI is available; defaults to false' },
+    },
+    output: jsonOutput,
+    timeoutMs: config.commandTimeoutMs * 3,
+    isConcurrencySafe: () => true,
+    async execute(args, exec) {
+      const file = await workspaceFile(config, exec, args.path)
+      return buildIdaScriptPlan(file, args.focus ?? '', args.execute ?? false, { ...commandOptions, signal: exec.signal }) as unknown as Promise<JsonValue>
     },
   }))
 
@@ -310,6 +368,63 @@ export function apply(ctx: Context, config: Config): void {
   }))
 
   ctx.tools.register(defineTool({
+    name: 'ctf_web_browser_probe',
+    description: 'Use local Chromium or Chrome headless mode to capture a DOM preview, title, and optional screenshot before requesting interactive browser MCP operations.',
+    parameters: {
+      url: { type: 'string', required: true, description: 'HTTP(S) URL to open' },
+      captureScreenshot: { type: 'boolean', description: 'Capture a PNG screenshot; defaults to true' },
+    },
+    output: jsonOutput,
+    timeoutMs: config.commandTimeoutMs * 3,
+    isConcurrencySafe: () => true,
+    async execute(args, exec) {
+      return probeWebBrowser({
+        url: args.url,
+        captureScreenshot: args.captureScreenshot,
+      }, { ...commandOptions, signal: exec.signal }) as unknown as Promise<JsonValue>
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'ctf_web_capture_probe',
+    description: 'Check local mitmproxy/mitmweb capability and create an ordered human handoff for starting a live HTTP(S) capture.',
+    parameters: {
+      listenHost: { type: 'string', description: 'Proxy listen host; defaults to 127.0.0.1' },
+      listenPort: { type: 'integer', description: 'Proxy listen port; defaults to 8080' },
+      webPort: { type: 'integer', description: 'mitmweb UI port; defaults to 8081' },
+    },
+    output: jsonOutput,
+    timeoutMs: config.commandTimeoutMs * 2,
+    isConcurrencySafe: () => true,
+    async execute(args, exec) {
+      return probeWebCapture({
+        listenHost: args.listenHost,
+        listenPort: args.listenPort,
+        webPort: args.webPort,
+      }, { ...commandOptions, signal: exec.signal }) as unknown as Promise<JsonValue>
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'ctf_tool_setup',
+    description: 'Create an ordered human setup request for GDB/Pwndbg, IDA Pro, radare2, Chrome DevTools MCP, mitmproxy, or BlackArch packages. The human returns only logs, screenshots, or OCR text.',
+    parameters: {
+      target: {
+        type: 'string',
+        required: true,
+        enum: ['gdb_pwndbg', 'ida_pro', 'r2', 'chrome_devtools_mcp', 'mitmproxy', 'blackarch_repo'],
+        description: 'Tool or package setup target',
+      },
+      context: { type: 'string', description: 'Optional local setup context' },
+    },
+    output: jsonOutput,
+    isConcurrencySafe: () => true,
+    async execute(args) {
+      return createToolSetupRequest(parseSetupTarget(args.target), args.context) as unknown as JsonValue
+    },
+  }))
+
+  ctx.tools.register(defineTool({
     name: 'ctf_human_request',
     description: 'Create a structured human-action request. The model must provide ordered operations with command or instruction text; the human only returns logs, screenshots, or OCR text.',
     parameters: {
@@ -387,6 +502,18 @@ function parseCategory(value: string | undefined): 'auto' | 're' | 'pwn' | 'cryp
   if (value === undefined || value === '') return undefined
   if (value === 'auto' || value === 're' || value === 'pwn' || value === 'crypto' || value === 'misc' || value === 'web') return value
   throw new Error('category must be auto, re, pwn, crypto, misc, or web')
+}
+
+function parseSetupTarget(value: string): CtfSetupTarget {
+  if (
+    value === 'gdb_pwndbg'
+    || value === 'ida_pro'
+    || value === 'r2'
+    || value === 'chrome_devtools_mcp'
+    || value === 'mitmproxy'
+    || value === 'blackarch_repo'
+  ) return value
+  throw new Error('target must be gdb_pwndbg, ida_pro, r2, chrome_devtools_mcp, mitmproxy, or blackarch_repo')
 }
 
 function parseHumanRequestType(value: string) {

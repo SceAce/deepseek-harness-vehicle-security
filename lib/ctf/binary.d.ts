@@ -36,6 +36,16 @@ export declare function debugPwnArtifact(file: ResolvedWorkspaceFile, args: {
         output: string | null;
     };
 }>;
+export declare function debugPwndbgArtifact(file: ResolvedWorkspaceFile, args: {
+    argv?: string[];
+    breakAt?: string;
+    extraCommands?: string[];
+}, options?: CommandOptions): Promise<CtfToolResultBase & {
+    debugger: {
+        output: string | null;
+        frontend: 'pwndbg';
+    };
+}>;
 export declare function searchRopGadgets(file: ResolvedWorkspaceFile, args: {
     query?: string;
     maxResults?: number;

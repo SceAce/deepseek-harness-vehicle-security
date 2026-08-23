@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises'
 import { findExecutable } from '../paths.js'
 import { runCommand, type CommandOptions } from '../process.js'
 import { commandRecord, type ToolInvocationRecord } from './types.js'
@@ -41,8 +42,19 @@ export interface CtfToolAuditResult {
     version: string | null
     modules: CtfCapability[]
   }
+  mcp: CtfMcpCapability[]
   commands: ToolInvocationRecord[]
   recommendations: string[]
+}
+
+export interface CtfMcpCapability {
+  id: string
+  category: CtfCapabilityCategory
+  configured: boolean
+  configSource: string | null
+  command: string | null
+  operations: string[]
+  limitation: string | null
 }
 
 const PROBES: CapabilityProbe[] = [
@@ -59,17 +71,25 @@ const PROBES: CapabilityProbe[] = [
   { id: 're.nm', category: 're', executable: 'nm', args: ['--version'], operations: ['symbol listing'] },
   { id: 're.r2', category: 're', executable: 'r2', args: ['-v'], operations: ['headless reverse-engineering queries'] },
   { id: 're.ghidra', category: 're', executable: 'analyzeHeadless', args: [], operations: ['Ghidra headless analysis'] },
+  { id: 're.patchelf', category: 're', executable: 'patchelf', args: ['--version'], operations: ['ELF interpreter, RPATH, and metadata inspection'] },
+  { id: 're.strace', category: 're', executable: 'strace', args: ['-V'], operations: ['syscall tracing'] },
+  { id: 're.ltrace', category: 're', executable: 'ltrace', args: ['-V'], operations: ['library call tracing'] },
   { id: 'pwn.checksec', category: 'pwn', executable: 'checksec', args: ['--version'], operations: ['binary mitigation summary'] },
   { id: 'pwn.gdb', category: 'pwn', executable: 'gdb', args: ['--version'], operations: ['batch debugging, registers, stack, maps'] },
   { id: 'pwn.ropgadget', category: 'pwn', executable: 'ROPgadget', args: ['--version'], operations: ['ROP gadget search'] },
   { id: 'pwn.ropper', category: 'pwn', executable: 'ropper', args: ['--version'], operations: ['ROP gadget search'] },
   { id: 'pwn.one_gadget', category: 'pwn', executable: 'one_gadget', args: ['--version'], operations: ['libc one_gadget search'] },
+  { id: 'pwn.seccomp_tools', category: 'pwn', executable: 'seccomp-tools', args: ['--version'], operations: ['seccomp rule dump and inspection'] },
   { id: 'crypto.sage', category: 'crypto', executable: 'sage', args: ['--version'], operations: ['number theory and symbolic math'] },
   { id: 'crypto.gp', category: 'crypto', executable: 'gp', args: ['--version'], operations: ['PARI/GP number theory'] },
   { id: 'web.curl', category: 'web', executable: 'curl', args: ['--version'], operations: ['HTTP request baseline'] },
   { id: 'web.httpx', category: 'web', executable: 'httpx', args: ['--version'], operations: ['HTTP probing'] },
   { id: 'web.sqlmap', category: 'web', executable: 'sqlmap', args: ['--version'], operations: ['SQL injection verification on local challenge targets'] },
   { id: 'web.chromium', category: 'web', executable: 'chromium', args: ['--version'], operations: ['browser-backed observation'] },
+  { id: 'web.ffuf', category: 'web', executable: 'ffuf', args: ['-V'], operations: ['content and parameter discovery'] },
+  { id: 'web.feroxbuster', category: 'web', executable: 'feroxbuster', args: ['--version'], operations: ['content discovery'] },
+  { id: 'web.mitmproxy', category: 'web', executable: 'mitmproxy', args: ['--version'], operations: ['HTTP(S) proxy capture and replay'] },
+  { id: 'web.mitmweb', category: 'web', executable: 'mitmweb', args: ['--version'], operations: ['interactive HTTP(S) proxy capture'] },
 ]
 
 const PYTHON_MODULES: PythonModuleProbe[] = [
@@ -123,6 +143,10 @@ export async function auditCtfTools(options: CommandOptions = {}): Promise<CtfTo
   }
 
   const python = await probePython(options)
+  const pwndbg = await probePwndbg(options)
+  const ida = await probeIdaCli()
+  const mcp = await probeMcpConfiguration()
+  capabilities.push(pwndbg, ida)
   return {
     schemaVersion: '1.0',
     available: capabilities.filter(item => item.available).length + python.modules.filter(item => item.available).length,
@@ -133,8 +157,9 @@ export async function auditCtfTools(options: CommandOptions = {}): Promise<CtfTo
       version: python.version,
       modules: python.modules,
     },
-    commands: [...commands, ...python.commands],
-    recommendations: recommendations(capabilities, python.modules),
+    mcp,
+    commands: [...commands, ...python.commands, ...pwndbg.commands],
+    recommendations: recommendations(capabilities, python.modules, mcp),
   }
 }
 
@@ -194,21 +219,120 @@ async function probePython(options: CommandOptions): Promise<{
   }
 }
 
+async function probePwndbg(options: CommandOptions): Promise<CtfCapability & { commands: ToolInvocationRecord[] }> {
+  const gdb = await findExecutable('gdb')
+  if (!gdb) {
+    return {
+      id: 'pwn.pwndbg',
+      category: 'pwn',
+      executable: 'gdb',
+      available: false,
+      path: null,
+      version: null,
+      operations: ['context view', 'pwndbg vmmap', 'heap and register helpers'],
+      features: [],
+      commands: [],
+    }
+  }
+  const argv = ['-q', '-batch', '-ex', 'python import pwndbg; print("pwndbg-loaded")']
+  const result = await runCommand(gdb, argv, options)
+  return {
+    id: 'pwn.pwndbg',
+    category: 'pwn',
+    executable: 'gdb',
+    available: result.ok && `${result.stdout}\n${result.stderr}`.includes('pwndbg-loaded'),
+    path: result.ok ? gdb : null,
+    version: result.ok ? 'loaded through gdb' : null,
+    operations: ['context view', 'pwndbg vmmap', 'heap and register helpers'],
+    features: result.ok ? ['python', 'pwndbg'] : [],
+    commands: [commandRecord(gdb, argv, result, options.cwd)],
+  }
+}
+
+async function probeIdaCli(): Promise<CtfCapability> {
+  const candidates = ['idat64', 'idat', 'ida64', 'ida']
+  for (const candidate of candidates) {
+    const executable = await findExecutable(candidate)
+    if (!executable) continue
+    return {
+      id: 're.ida_cli',
+      category: 're',
+      executable: candidate,
+      available: true,
+      path: executable,
+      version: 'CLI detected',
+      operations: ['IDAPython script execution', 'batch analysis'],
+      features: ['idapython', 'batch'],
+    }
+  }
+  return {
+    id: 're.ida_cli',
+    category: 're',
+    executable: 'idat64',
+    available: false,
+    path: null,
+    version: null,
+    operations: ['IDAPython script execution', 'batch analysis'],
+    features: [],
+  }
+}
+
+async function probeMcpConfiguration(): Promise<CtfMcpCapability[]> {
+  const configPath = process.env.DSH_CTF_MCP_CONFIG?.trim() || process.env.CTF_MCP_CONFIG?.trim()
+  let configuredServers: Record<string, unknown> = {}
+  if (configPath) {
+    try {
+      const parsed = JSON.parse(await readFile(configPath, 'utf8')) as { mcpServers?: Record<string, unknown> }
+      configuredServers = parsed.mcpServers ?? {}
+    } catch {
+      configuredServers = {}
+    }
+  }
+
+  const definitions = [
+    { id: 'mcp.ida_pro', category: 're' as const, names: ['ida-pro', 'ida', 'ida-pro-mcp'], operations: ['IDAPython script dispatch', 'functions', 'xrefs', 'decompiler queries'] },
+    { id: 'mcp.r2', category: 're' as const, names: ['r2', 'radare2', 'radare2-mcp'], operations: ['r2 command dispatch', 'analysis JSON', 'xrefs', 'debugger queries'] },
+    { id: 'mcp.chrome_devtools', category: 'web' as const, names: ['chrome-devtools', 'chrome-devtools-mcp'], operations: ['browser navigation', 'DOM', 'network', 'console', 'screenshots'] },
+    { id: 'mcp.gdb_pwndbg', category: 'pwn' as const, names: ['gdb-pwndbg', 'pwndbg', 'gdb-mcp'], operations: ['breakpoints', 'registers', 'memory', 'pwndbg context'] },
+  ]
+
+  return definitions.map(definition => {
+    const matchedName = definition.names.find(name => Object.prototype.hasOwnProperty.call(configuredServers, name))
+    const envKey = `DSH_CTF_${definition.id.slice(4).toUpperCase().replaceAll('.', '_')}_MCP`
+    const envValue = process.env[envKey]?.trim()
+    return {
+      id: definition.id,
+      category: definition.category,
+      configured: Boolean(matchedName || envValue),
+      configSource: matchedName ? `${configPath ?? 'MCP config'}:${matchedName}` : envValue ? envKey : null,
+      command: envValue || (matchedName ? 'configured in MCP JSON' : null),
+      operations: definition.operations,
+      limitation: matchedName || envValue ? null : 'MCP server must be installed and configured by the human before DSH/Codex can use it.',
+    }
+  })
+}
+
 function firstLine(stdout: string, stderr: string): string | null {
   return `${stdout}\n${stderr}`.split(/\r?\n/).map(line => line.trim()).find(Boolean) ?? null
 }
 
-function recommendations(capabilities: CtfCapability[], modules: CtfCapability[]): string[] {
+function recommendations(capabilities: CtfCapability[], modules: CtfCapability[], mcp: CtfMcpCapability[]): string[] {
   const available = new Set([...capabilities, ...modules].filter(item => item.available).map(item => item.id))
   const result: string[] = []
   if (!available.has('core.file')) result.push('Install file for reliable artifact type detection.')
   if (!available.has('re.readelf')) result.push('Install binutils for ELF analysis.')
   if (!available.has('pwn.gdb')) result.push('Install gdb for pwn runtime probes.')
+  if (!available.has('pwn.pwndbg')) result.push('Configure pwndbg inside gdb for context, vmmap, heap, and register views.')
   if (!available.has('python.pwntools')) result.push('Install pwntools for pwn process automation.')
+  if (!available.has('re.ida_cli')) result.push('Expose IDA idat64/idat on PATH for IDAPython batch scripts.')
   if (!available.has('web.curl') && !available.has('python.requests')) result.push('Install curl or requests for web challenge baselines.')
   if (!available.has('misc.tshark')) result.push('Install tshark for PCAP triage.')
+  if (!available.has('web.mitmproxy')) result.push('Install mitmproxy for live HTTP(S) capture; tshark remains the offline PCAP tool.')
   if (!available.has('crypto.sage') && !available.has('python.z3') && !available.has('python.sympy')) {
     result.push('Install Sage, z3, or SymPy for crypto challenge solving.')
+  }
+  for (const item of mcp.filter(item => !item.configured)) {
+    result.push(`Configure ${item.id} through DSH_CTF_MCP_CONFIG or the host MCP client before using its external server.`)
   }
   return result
 }

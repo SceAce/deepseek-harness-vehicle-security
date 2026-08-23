@@ -35,8 +35,18 @@ export interface CtfToolAuditResult {
         version: string | null;
         modules: CtfCapability[];
     };
+    mcp: CtfMcpCapability[];
     commands: ToolInvocationRecord[];
     recommendations: string[];
+}
+export interface CtfMcpCapability {
+    id: string;
+    category: CtfCapabilityCategory;
+    configured: boolean;
+    configSource: string | null;
+    command: string | null;
+    operations: string[];
+    limitation: string | null;
 }
 export declare function auditCtfTools(options?: CommandOptions): Promise<CtfToolAuditResult>;
 export declare function hasCapability(audit: CtfToolAuditResult, id: string): boolean;

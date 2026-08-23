@@ -85,6 +85,62 @@ export async function debugPwnArtifact(
   return { ...base, status: capture.ok ? 'ok' : 'failed', debugger: { output: [capture.stdout, capture.stderr].filter(Boolean).join('\n').trim() || null } }
 }
 
+export async function debugPwndbgArtifact(
+  file: ResolvedWorkspaceFile,
+  args: {
+    argv?: string[]
+    breakAt?: string
+    extraCommands?: string[]
+  },
+  options: CommandOptions = {},
+): Promise<CtfToolResultBase & { debugger: { output: string | null; frontend: 'pwndbg' } }> {
+  const base = emptyResult()
+  const gdb = await findExecutable('gdb')
+  if (!gdb) {
+    base.status = 'missing_capability'
+    base.limitations.push('gdb is not installed; Pwndbg cannot be loaded.')
+    base.nextActions.push({ tool: 'ctf_tool_setup', args: { target: 'gdb_pwndbg' }, reason: 'Install GDB and Pwndbg before running the Pwndbg probe.' })
+    return { ...base, debugger: { output: null, frontend: 'pwndbg' } }
+  }
+
+  const gdbCommands = [
+    'set pagination off',
+    'set confirm off',
+    `file ${quoteGdbCommandArgument(file.path)}`,
+    ...(Array.isArray(args.argv) && args.argv.length > 0 ? [`set args ${args.argv.slice(0, 16).map(quoteGdbCommandArgument).join(' ')}`] : []),
+    ...(args.breakAt ? [`break ${quoteGdbCommandArgument(args.breakAt)}`] : []),
+    'starti',
+    'context',
+    'vmmap',
+    'info registers',
+    'bt',
+    ...(args.extraCommands ?? []).slice(0, 12),
+  ]
+  const argv = ['-q', '-batch', ...gdbCommands.flatMap(command => ['-ex', command])]
+  const capture = await runCommand(gdb, argv, {
+    ...options,
+    maxOutputChars: Math.max(options.maxOutputChars ?? 60_000, 120_000),
+  })
+  base.commands.push(commandRecord(gdb, argv, capture, options.cwd))
+  const output = [capture.stdout, capture.stderr].filter(Boolean).join('\n').trim() || null
+  const combinedOutput = output?.toLowerCase() ?? ''
+  if (combinedOutput.includes('pwndbg') || combinedOutput.includes('context')) {
+    base.observations.push('GDB batch probe executed Pwndbg-oriented context, vmmap, register, and backtrace commands.')
+  } else {
+    base.limitations.push('GDB ran, but the output does not confirm Pwndbg command output; inspect the raw debugger output.')
+  }
+  if (!capture.ok) {
+    base.limitations.push(`Pwndbg GDB probe exited with ${capture.exitCode ?? 'no status'}: ${capture.error ?? capture.stderr.trim()}`)
+  }
+  base.nextActions.push({ tool: 'ctf_pwn_profile', args: { path: file.relativePath }, reason: 'Correlate Pwndbg runtime observations with static mitigations and imports.' })
+  const pwndbgLoaded = combinedOutput.includes('pwndbg')
+  return {
+    ...base,
+    status: capture.ok || pwndbgLoaded ? 'ok' : 'failed',
+    debugger: { output, frontend: 'pwndbg' },
+  }
+}
+
 export async function searchRopGadgets(
   file: ResolvedWorkspaceFile,
   args: { query?: string; maxResults?: number },
@@ -308,4 +364,8 @@ function normalizeInteger(value: number | undefined, fallback: number, min: numb
   if (value === undefined) return fallback
   if (!Number.isInteger(value) || value < min || value > max) throw new Error(`integer must be in range ${min}..${max}`)
   return value
+}
+
+function quoteGdbCommandArgument(value: string): string {
+  return `'${value.replaceAll('\\', '\\\\').replaceAll("'", "\\'")}'`
 }
