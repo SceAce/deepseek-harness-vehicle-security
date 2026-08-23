@@ -20,7 +20,7 @@ const ctfRuntime = path.join(
   'codex-plugin/plugins/ctf-security/skills/investigate-ctf/runtime',
 )
 const ctfSkillRoot = path.dirname(ctfRuntime)
-const ctfModules = ['artifact', 'capabilities', 'router', 'types']
+const ctfModules = ['artifact', 'binary', 'capabilities', 'crypto', 'human', 'misc', 'router', 'types', 'web']
 
 await rm(ctfRuntime, { recursive: true, force: true })
 await mkdir(ctfRuntime, { recursive: true })

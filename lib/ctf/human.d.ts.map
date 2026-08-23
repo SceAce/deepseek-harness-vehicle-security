@@ -1,0 +1,1 @@
+{"version":3,"file":"human.d.ts","sourceRoot":"","sources":["../../src/ctf/human.ts"],"names":[],"mappings":"AACA,OAAO,EAAe,KAAK,eAAe,EAAE,KAAK,iBAAiB,EAAE,MAAM,YAAY,CAAA;AAEtF,MAAM,WAAW,kBAAmB,SAAQ,iBAAiB;IAC3D,SAAS,EAAE,MAAM,CAAA;IACjB,OAAO,EAAE,eAAe,CAAA;CACzB;AAED,wBAAgB,kBAAkB,CAAC,OAAO,EAAE,eAAe,GAAG,kBAAkB,CAU/E"}
