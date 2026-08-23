@@ -5,8 +5,10 @@ export type CtfSetupTarget =
   | 'gdb_pwndbg'
   | 'ida_pro'
   | 'r2'
+  | 'chrome_mcp'
   | 'chrome_devtools_mcp'
   | 'mitmproxy'
+  | 'python_ctf_env'
   | 'blackarch_repo'
 
 export interface ToolSetupRequestResult extends HumanRequestResult {
@@ -64,36 +66,36 @@ function buildSetupRequest(target: CtfSetupTarget, context?: string): CtfHumanRe
     case 'ida_pro':
       return requestFromOperations(
         'start_service',
-        'Install IDA Pro and prepare an IDAPython workflow',
-        'IDA is not configured locally, but the next RE step needs an IDAPython script-based workflow.',
+        'Verify the IDA MCP and optional IDA CLI fallback',
+        'IDA MCP should be the primary RE integration. IDA CLI is only needed when batch execution outside the MCP is specifically required.',
         [
           {
             order: 1,
             kind: 'instruction',
-            title: 'Install and expose IDA',
-            instruction: 'Install IDA Pro, then ensure idat64, idat, ida64, or ida is reachable from the local PATH or a known absolute path.',
-            expectedSignal: 'Return a log or OCR line showing the CLI path that was found.',
+            title: 'Confirm the IDA MCP',
+            instruction: 'Use the already configured IDA MCP to open the challenge database or attach the target binary, then return the MCP/client status text.',
+            expectedSignal: 'Return log or OCR text showing the IDA MCP server and target database are available.',
           },
           {
             order: 2,
-            kind: 'command',
-            title: 'Run an IDAPython script in batch mode',
-            command: 'idat64 -A -Sanalysis.py chall.bin',
-            expectedSignal: 'Return the analysis log produced by IDAPython or the exact command failure.',
+            kind: 'instruction',
+            title: 'Check the optional CLI fallback',
+            instruction: 'Only if batch execution is needed, expose idat64, idat, ida64, or ida on PATH and return the resolved path.',
+            expectedSignal: 'Return a log or OCR line with the optional IDA CLI path, or state that the MCP path is sufficient.',
           },
           {
             order: 3,
-            kind: 'instruction',
-            title: 'Confirm script handoff',
-            instruction: 'Return the script path, input binary, and the first question the script should answer.',
-            expectedSignal: 'Return log or OCR text with the script path and analysis goal.',
+            kind: 'command',
+            title: 'Verify IDAPython only when CLI exists',
+            command: 'command -v idat64 || command -v idat || command -v ida64 || command -v ida || true',
+            expectedSignal: 'Return the command output; an empty result is acceptable when IDA MCP is the selected execution path.',
           },
         ],
         context,
         {
-          log: 'IDA CLI path, batch-mode log, and the analysis goal',
+          log: 'IDA MCP status and optional CLI path',
           screenshot: 'IDA UI or terminal screenshot text showing the script handoff',
-          ocr_text: 'recognized text containing the CLI path and batch command',
+          ocr_text: 'recognized text containing the MCP status or optional CLI path',
         },
       )
     case 'r2':
@@ -131,39 +133,75 @@ function buildSetupRequest(target: CtfSetupTarget, context?: string): CtfHumanRe
           ocr_text: 'recognized text with the repository path or version banner',
         },
       )
+    case 'chrome_mcp':
     case 'chrome_devtools_mcp':
       return requestFromOperations(
         'start_service',
-        'Configure Chrome DevTools MCP',
-        'The browser automation path needs a local Chrome DevTools MCP server.',
+        'Verify mcp-chrome browser bridge',
+        'The browser automation path uses the installed mcp-chrome bridge; the AI writes the MCP JSON and the human only confirms the bridge/extension state.',
         [
           {
             order: 1,
             kind: 'command',
-            title: 'Test the MCP server',
-            command: 'npx --yes chrome-devtools-mcp@latest --help',
-            expectedSignal: 'Return the chrome-devtools-mcp help text or install prompt text.',
+            title: 'Check the local bridge endpoint',
+            command: 'curl -sS --max-time 5 http://127.0.0.1:12306/mcp',
+            expectedSignal: 'Return the bridge response or the exact connection error.',
           },
           {
             order: 2,
             kind: 'instruction',
-            title: 'Add the MCP entry',
-            instruction: 'Add a stdio MCP entry pointing to npx chrome-devtools-mcp@latest in the client configuration, then restart the client.',
-            expectedSignal: 'Return log or OCR text showing the added MCP entry and restart result.',
+            title: 'Confirm the Chrome extension bridge',
+            instruction: 'Ensure the mcp-chrome extension/bridge is running in the intended Chrome profile and return its visible status.',
+            expectedSignal: 'Return log, screenshot, or OCR text showing the bridge is running.',
           },
           {
             order: 3,
             kind: 'instruction',
             title: 'Confirm browser automation works',
-            instruction: 'Open a local page or target site through the configured MCP and return the resulting log or screenshot text.',
+            instruction: 'Open a local page through the configured mcp-chrome MCP and return the resulting log or screenshot text.',
             expectedSignal: 'Return log, screenshot text, or OCR text from the browser automation session.',
           },
         ],
         context,
         {
-          log: 'MCP help output and client restart logs',
+          log: 'bridge endpoint response and browser automation logs',
           screenshot: 'client configuration or browser session screenshot text',
           ocr_text: 'recognized text containing the MCP entry or server status',
+        },
+      )
+    case 'python_ctf_env':
+      return requestFromOperations(
+        'start_service',
+        'Verify the CTF Python virtual environment',
+        'The CTF tool layer should use the existing Python environment before installing or scripting around missing libraries.',
+        [
+          {
+            order: 1,
+            kind: 'command',
+            title: 'Verify the selected interpreter',
+            command: 'source /home/source/tools/PyVenv/CTF/bin/activate && python --version && python -m pip --version',
+            expectedSignal: 'Return the Python and pip version output.',
+          },
+          {
+            order: 2,
+            kind: 'command',
+            title: 'Verify core CTF modules',
+            command: 'source /home/source/tools/PyVenv/CTF/bin/activate && python -c \'import pwn, z3, sympy, Crypto, gmpy2, requests, PIL, unicorn, capstone, lief, bs4; print("ctf-modules-ok")\'',
+            expectedSignal: 'Return ctf-modules-ok or the first missing import.',
+          },
+          {
+            order: 3,
+            kind: 'instruction',
+            title: 'Report only missing modules',
+            instruction: 'If a required module is missing, return its import name and let the AI generate the exact install command for this venv.',
+            expectedSignal: 'Return log or OCR text listing missing imports; do not paste secrets.',
+          },
+        ],
+        context,
+        {
+          log: 'Python/pip versions and module verification output',
+          screenshot: 'terminal screenshot text showing the active venv',
+          ocr_text: 'recognized text containing the interpreter path or missing modules',
         },
       )
     case 'mitmproxy':

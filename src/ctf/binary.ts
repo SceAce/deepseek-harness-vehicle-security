@@ -1,5 +1,6 @@
 import { profileCtfArtifact, type CtfArtifactProfile } from './artifact.js'
-import { findExecutable, type ResolvedWorkspaceFile } from '../paths.js'
+import { findCtfExecutable } from './environment.js'
+import type { ResolvedWorkspaceFile } from '../paths.js'
 import { runCommand, type CommandOptions } from '../process.js'
 import { commandRecord, emptyResult, type CtfNextAction, type CtfToolResultBase } from './types.js'
 
@@ -52,7 +53,7 @@ export async function debugPwnArtifact(
   options: CommandOptions = {},
 ): Promise<CtfToolResultBase & { debugger: { output: string | null } }> {
   const base = emptyResult()
-  const gdb = await findExecutable('gdb')
+  const gdb = await findCtfExecutable('gdb', options.cwd)
   if (!gdb) {
     base.status = 'missing_capability'
     base.limitations.push('gdb is not installed.')
@@ -95,7 +96,7 @@ export async function debugPwndbgArtifact(
   options: CommandOptions = {},
 ): Promise<CtfToolResultBase & { debugger: { output: string | null; frontend: 'pwndbg' } }> {
   const base = emptyResult()
-  const gdb = await findExecutable('gdb')
+  const gdb = await findCtfExecutable('gdb', options.cwd)
   if (!gdb) {
     base.status = 'missing_capability'
     base.limitations.push('gdb is not installed; Pwndbg cannot be loaded.')
@@ -147,8 +148,8 @@ export async function searchRopGadgets(
   options: CommandOptions = {},
 ): Promise<CtfToolResultBase & { gadgets: string[] }> {
   const base = emptyResult()
-  const ropGadget = await findExecutable('ROPgadget')
-  const ropper = await findExecutable('ropper')
+  const ropGadget = await findCtfExecutable('ROPgadget', options.cwd)
+  const ropper = await findCtfExecutable('ropper', options.cwd)
   const maxResults = normalizeInteger(args.maxResults, 80, 1, 500)
 
   if (ropGadget) {
@@ -204,7 +205,7 @@ async function collectBinaryFacts(
   }
 
   if (binary.format === 'elf') {
-    const readelf = await findExecutable('readelf')
+    const readelf = await findCtfExecutable('readelf', options.cwd)
     if (readelf) {
       const header = await runCommand(readelf, ['-hW', '--', file.path], options)
       const programHeaders = await runCommand(readelf, ['-lW', '--', file.path], options)
@@ -223,7 +224,7 @@ async function collectBinaryFacts(
     }
   }
 
-  const strings = await findExecutable('strings')
+  const strings = await findCtfExecutable('strings', options.cwd)
   if (strings) {
     const capture = await runCommand(strings, ['-a', '-t', 'x', '-n', '5', '--', file.path], { ...options, maxOutputChars: Math.max(options.maxOutputChars ?? 60_000, 120_000) })
     base.commands.push(commandRecord(strings, ['-a', '-t', 'x', '-n', '5', '--', file.path], capture, options.cwd))
@@ -234,7 +235,7 @@ async function collectBinaryFacts(
   }
 
   if (includeChecksec) {
-    const checksec = await findExecutable('checksec')
+    const checksec = await findCtfExecutable('checksec', options.cwd)
     if (checksec) {
       const argv = ['--file', file.path]
       const capture = await runCommand(checksec, argv, options)

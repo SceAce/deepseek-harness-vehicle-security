@@ -1,6 +1,7 @@
 import { profileCtfArtifact, type CtfArtifactProfile } from './artifact.js'
 import { makeHumanRequest } from './human.js'
-import { findExecutable, type ResolvedWorkspaceFile } from '../paths.js'
+import { findCtfExecutable } from './environment.js'
+import type { ResolvedWorkspaceFile } from '../paths.js'
 import { runCommand, type CommandOptions } from '../process.js'
 import { commandRecord, emptyResult, type CtfToolResultBase } from './types.js'
 
@@ -72,7 +73,7 @@ export async function profilePcapArtifact(
   base.limitations.push(...profile.limitations)
   const toolOutputs: Record<string, string | null> = {}
 
-  const tshark = await findExecutable('tshark')
+  const tshark = await findCtfExecutable('tshark', options.cwd)
   if (!tshark) {
     base.status = 'missing_capability'
     base.limitations.push('tshark is not installed; pcap conversation and protocol hierarchy were skipped.')
@@ -103,7 +104,7 @@ async function optionalProbe(
   base: CtfToolResultBase,
   options: CommandOptions,
 ): Promise<void> {
-  const executable = await findExecutable(executableName)
+  const executable = await findCtfExecutable(executableName, options.cwd)
   if (!executable) {
     base.limitations.push(`${executableName} is not installed.`)
     outputs[outputKey] = null

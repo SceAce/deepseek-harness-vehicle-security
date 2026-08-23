@@ -32,6 +32,9 @@ export interface CtfToolAuditResult {
     capabilities: CtfCapability[];
     python: {
         executable: string | null;
+        source: string | null;
+        venv: string | null;
+        bin: string | null;
         version: string | null;
         modules: CtfCapability[];
     };

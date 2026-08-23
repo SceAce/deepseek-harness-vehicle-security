@@ -22,6 +22,21 @@ const tools = [
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },
   },
   {
+    name: 'ctf_mcp_configure',
+    description: 'Write the CTF MCP configuration for mcp-chrome and Tavily without exposing API keys in output.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        configPath: { type: 'string' },
+        chromeUrl: { type: 'string' },
+        includeChrome: { type: 'boolean' },
+        includeTavily: { type: 'boolean' },
+        tavilyApiKey: { type: 'string' },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
     name: 'ctf_artifact_profile',
     description: 'Profile one local CTF artifact: hash, size, magic, file type, entropy, and text sample.',
     inputSchema: {
@@ -245,7 +260,7 @@ const tools = [
     inputSchema: {
       type: 'object',
       properties: {
-        target: { type: 'string', enum: ['gdb_pwndbg', 'ida_pro', 'r2', 'chrome_devtools_mcp', 'mitmproxy', 'blackarch_repo'] },
+        target: { type: 'string', enum: ['gdb_pwndbg', 'ida_pro', 'r2', 'chrome_mcp', 'chrome_devtools_mcp', 'mitmproxy', 'python_ctf_env', 'blackarch_repo'] },
         context: { type: 'string' },
       },
       required: ['target'],
@@ -292,6 +307,16 @@ async function callTool(name, args) {
     case 'ctf_tool_audit': {
       const { auditCtfTools } = await runtime('capabilities')
       return auditCtfTools(commandOptions)
+    }
+    case 'ctf_mcp_configure': {
+      const { configureCtfMcp } = await runtime('mcp')
+      return configureCtfMcp({
+        configPath: args.configPath,
+        chromeUrl: args.chromeUrl,
+        includeChrome: args.includeChrome,
+        includeTavily: args.includeTavily,
+        tavilyApiKey: args.tavilyApiKey,
+      })
     }
     case 'ctf_artifact_profile': {
       const { profileCtfArtifact } = await runtime('artifact')
@@ -441,7 +466,7 @@ async function callTool(name, args) {
     case 'ctf_tool_setup': {
       const { createToolSetupRequest } = await runtime('setup')
       const target = requireString(args.target, 'target')
-      if (!['gdb_pwndbg', 'ida_pro', 'r2', 'chrome_devtools_mcp', 'mitmproxy', 'blackarch_repo'].includes(target)) {
+      if (!['gdb_pwndbg', 'ida_pro', 'r2', 'chrome_mcp', 'chrome_devtools_mcp', 'mitmproxy', 'python_ctf_env', 'blackarch_repo'].includes(target)) {
         throw new Error(`unknown setup target: ${target}`)
       }
       return createToolSetupRequest(target, typeof args.context === 'string' ? args.context : undefined)

@@ -2,7 +2,8 @@ import { createHash } from 'node:crypto'
 import { createReadStream } from 'node:fs'
 import { open } from 'node:fs/promises'
 import path from 'node:path'
-import { findExecutable, type ResolvedWorkspaceFile } from '../paths.js'
+import { findCtfExecutable } from './environment.js'
+import type { ResolvedWorkspaceFile } from '../paths.js'
 import { runCommand, type CommandOptions } from '../process.js'
 import { commandRecord, type ToolInvocationRecord } from './types.js'
 
@@ -35,7 +36,7 @@ export async function profileCtfArtifact(
   const magic = await readMagic(file.path, 16)
   let fileType: string | null = null
 
-  const fileCommand = await findExecutable('file')
+  const fileCommand = await findCtfExecutable('file', options.cwd)
   if (fileCommand) {
     const result = await runCommand(fileCommand, ['--brief', '--', file.path], options)
     commands.push(commandRecord(fileCommand, ['--brief', '--', file.path], result, options.cwd))

@@ -1,6 +1,6 @@
-import { readFile } from 'node:fs/promises';
-import { findExecutable } from '../paths.js';
+import { discoverCtfPython, findCtfExecutable } from './environment.js';
 import { runCommand } from '../process.js';
+import { discoverCtfMcpConfiguration } from './mcp.js';
 import { commandRecord } from './types.js';
 const PROBES = [
     { id: 'core.file', category: 'core', executable: 'file', args: ['--version'], operations: ['artifact type detection'] },
@@ -45,12 +45,19 @@ const PYTHON_MODULES = [
     { module: 'requests', importName: 'requests', category: 'web', operations: ['structured HTTP client'] },
     { module: 'scapy', importName: 'scapy.all', category: 'misc', operations: ['packet parsing and generation'] },
     { module: 'PIL', importName: 'PIL', category: 'misc', operations: ['image parsing and transforms'] },
+    { module: 'angr', importName: 'angr', category: 're', operations: ['symbolic execution and binary exploration'] },
+    { module: 'unicorn', importName: 'unicorn', category: 're', operations: ['CPU emulation'] },
+    { module: 'capstone', importName: 'capstone', category: 're', operations: ['multi-architecture disassembly'] },
+    { module: 'lief', importName: 'lief', category: 're', operations: ['binary format parsing and patch planning'] },
+    { module: 'beautifulsoup4', importName: 'bs4', category: 'web', operations: ['HTML parsing'] },
+    { module: 'playwright', importName: 'playwright', category: 'web', operations: ['browser automation fallback'] },
 ];
 export async function auditCtfTools(options = {}) {
     const capabilities = [];
     const commands = [];
+    const python = await probePython(options);
     for (const probe of PROBES) {
-        const resolved = await findExecutable(probe.executable);
+        const resolved = await findCtfExecutable(probe.executable, options.cwd);
         if (!resolved) {
             capabilities.push({
                 id: probe.id,
@@ -81,7 +88,6 @@ export async function auditCtfTools(options = {}) {
             features: probe.features ?? [],
         });
     }
-    const python = await probePython(options);
     const pwndbg = await probePwndbg(options);
     const ida = await probeIdaCli();
     const mcp = await probeMcpConfiguration();
@@ -93,6 +99,9 @@ export async function auditCtfTools(options = {}) {
         capabilities,
         python: {
             executable: python.executable,
+            source: python.source,
+            venv: python.venv,
+            bin: python.bin,
             version: python.version,
             modules: python.modules,
         },
@@ -105,11 +114,14 @@ export function hasCapability(audit, id) {
     return [...audit.capabilities, ...audit.python.modules].some(item => item.id === id && item.available);
 }
 async function probePython(options) {
-    const python = await findExecutable('python3') ?? await findExecutable('python');
+    const environment = await discoverCtfPython(options.cwd);
     const commands = [];
-    if (!python) {
+    if (!environment.executable) {
         return {
             executable: null,
+            source: null,
+            venv: null,
+            bin: null,
             version: null,
             commands,
             modules: PYTHON_MODULES.map(item => ({
@@ -124,32 +136,36 @@ async function probePython(options) {
             })),
         };
     }
-    const versionResult = await runCommand(python, ['--version'], options);
-    commands.push(commandRecord(python, ['--version'], versionResult, options.cwd));
+    const versionResult = await runCommand(environment.executable, ['--version'], options);
+    commands.push(commandRecord(environment.executable, ['--version'], versionResult, options.cwd));
     const modules = [];
     for (const moduleProbe of PYTHON_MODULES) {
-        const result = await runCommand(python, ['-c', `import ${moduleProbe.importName}; print("ok")`], options);
-        commands.push(commandRecord(python, ['-c', `import ${moduleProbe.importName}; print("ok")`], result, options.cwd));
+        const argv = ['-c', `import ${moduleProbe.importName}; print("ok")`];
+        const result = await runCommand(environment.executable, argv, options);
+        commands.push(commandRecord(environment.executable, argv, result, options.cwd));
         modules.push({
             id: `python.${moduleProbe.module}`,
             category: moduleProbe.category,
             executable: moduleProbe.importName,
             available: result.ok,
-            path: result.ok ? python : null,
+            path: result.ok ? environment.executable : null,
             version: result.ok ? 'import ok' : null,
             operations: moduleProbe.operations,
             features: [],
         });
     }
     return {
-        executable: python,
+        executable: environment.executable,
+        source: environment.source,
+        venv: environment.venv,
+        bin: environment.bin,
         version: firstLine(versionResult.stdout, versionResult.stderr),
         modules,
         commands,
     };
 }
 async function probePwndbg(options) {
-    const gdb = await findExecutable('gdb');
+    const gdb = await findCtfExecutable('gdb', options.cwd);
     if (!gdb) {
         return {
             id: 'pwn.pwndbg',
@@ -180,7 +196,7 @@ async function probePwndbg(options) {
 async function probeIdaCli() {
     const candidates = ['idat64', 'idat', 'ida64', 'ida'];
     for (const candidate of candidates) {
-        const executable = await findExecutable(candidate);
+        const executable = await findCtfExecutable(candidate);
         if (!executable)
             continue;
         return {
@@ -206,35 +222,38 @@ async function probeIdaCli() {
     };
 }
 async function probeMcpConfiguration() {
-    const configPath = process.env.DSH_CTF_MCP_CONFIG?.trim() || process.env.CTF_MCP_CONFIG?.trim();
-    let configuredServers = {};
-    if (configPath) {
-        try {
-            const parsed = JSON.parse(await readFile(configPath, 'utf8'));
-            configuredServers = parsed.mcpServers ?? {};
-        }
-        catch {
-            configuredServers = {};
-        }
-    }
+    const discovery = await discoverCtfMcpConfiguration();
     const definitions = [
         { id: 'mcp.ida_pro', category: 're', names: ['ida-pro', 'ida', 'ida-pro-mcp'], operations: ['IDAPython script dispatch', 'functions', 'xrefs', 'decompiler queries'] },
         { id: 'mcp.r2', category: 're', names: ['r2', 'radare2', 'radare2-mcp'], operations: ['r2 command dispatch', 'analysis JSON', 'xrefs', 'debugger queries'] },
-        { id: 'mcp.chrome_devtools', category: 'web', names: ['chrome-devtools', 'chrome-devtools-mcp'], operations: ['browser navigation', 'DOM', 'network', 'console', 'screenshots'] },
+        { id: 'mcp.chrome', category: 'web', names: ['mcp-chrome', 'chrome-mcp', 'chrome', 'chrome-devtools', 'chrome-devtools-mcp'], operations: ['browser navigation', 'DOM', 'network', 'console', 'screenshots', 'tabs', 'cookies'] },
         { id: 'mcp.gdb_pwndbg', category: 'pwn', names: ['gdb-pwndbg', 'pwndbg', 'gdb-mcp'], operations: ['breakpoints', 'registers', 'memory', 'pwndbg context'] },
+        { id: 'mcp.tavily', category: 'web', names: ['tavily', 'tavily-mcp', 'tavily-remote-mcp'], operations: ['CVE search', 'vulnerability version lookup', 'web search', 'page extraction'] },
     ];
     return definitions.map(definition => {
-        const matchedName = definition.names.find(name => isConfiguredServer(configuredServers[name]));
+        const matchedName = definition.names.find(name => isConfiguredServer(discovery.configuredServers[name]));
         const envKey = `DSH_CTF_${definition.id.slice(4).toUpperCase().replaceAll('.', '_')}_MCP`;
         const envValue = process.env[envKey]?.trim();
+        const envConfigured = Boolean(envValue)
+            || definition.id === 'mcp.tavily' && Boolean(process.env.TAVILY_API_KEY?.trim())
+            || definition.id === 'mcp.chrome' && Boolean(process.env.DSH_CTF_CHROME_MCP_URL?.trim());
+        const source = matchedName
+            ? `${discovery.serverSources[matchedName] ?? 'MCP config'}:${matchedName}`
+            : envValue
+                ? envKey
+                : definition.id === 'mcp.tavily' && process.env.TAVILY_API_KEY?.trim()
+                    ? 'TAVILY_API_KEY'
+                    : definition.id === 'mcp.chrome' && process.env.DSH_CTF_CHROME_MCP_URL?.trim()
+                        ? 'DSH_CTF_CHROME_MCP_URL'
+                        : null;
         return {
             id: definition.id,
             category: definition.category,
-            configured: Boolean(matchedName || envValue),
-            configSource: matchedName ? `${configPath ?? 'MCP config'}:${matchedName}` : envValue ? envKey : null,
+            configured: Boolean(matchedName || envConfigured),
+            configSource: source,
             command: envValue || (matchedName ? 'configured in MCP JSON' : null),
             operations: definition.operations,
-            limitation: matchedName || envValue ? null : 'MCP server must be installed and configured by the human before DSH/Codex can use it.',
+            limitation: matchedName || envConfigured ? null : 'MCP server must be installed and configured before DSH/Codex can use its external operations.',
         };
     });
 }
@@ -246,11 +265,20 @@ function isConfiguredServer(value) {
     if (typeof value !== 'object')
         return false;
     const command = value.command;
-    if (typeof command !== 'string' || command.trim() === '' || command.startsWith('REPLACE_WITH_'))
+    const url = value.url;
+    if ((typeof command !== 'string' || command.trim() === '' || command.startsWith('REPLACE_WITH_'))
+        && (typeof url !== 'string' || url.trim() === '' || url.startsWith('REPLACE_WITH_')))
         return false;
     const args = value.args;
     if (Array.isArray(args) && args.some(item => typeof item === 'string' && item.startsWith('REPLACE_WITH_')))
         return false;
+    const env = value.env;
+    if (env && typeof env === 'object') {
+        for (const [key, item] of Object.entries(env)) {
+            if (typeof item !== 'string' || item.trim() === '' || isSecretPlaceholder(key, item))
+                return false;
+        }
+    }
     return true;
 }
 function firstLine(stdout, stderr) {
@@ -275,28 +303,39 @@ function recommendations(capabilities, modules, mcp) {
         result.push('Install pwntools for pwn process automation.');
     if (!available.has('pwn.ropgadget') && !available.has('pwn.ropper'))
         result.push('Install ROPgadget or ropper for gadget enumeration.');
-    if (!available.has('re.ida_cli'))
-        result.push('Expose IDA idat64/idat on PATH for IDAPython batch scripts.');
+    if (!available.has('re.ida_cli') && !mcp.some(item => item.id === 'mcp.ida_pro' && item.configured)) {
+        result.push('IDA CLI is optional: use the configured IDA MCP for IDAPython/decompiler work, or expose idat64/idat only for batch fallback.');
+    }
     if (!available.has('re.patchelf'))
         result.push('Install patchelf for ELF interpreter and RPATH inspection.');
     if (!available.has('re.strace') && !available.has('re.ltrace'))
         result.push('Install strace or ltrace for runtime syscall/library tracing.');
     if (!available.has('web.curl') && !available.has('python.requests'))
         result.push('Install curl or requests for web challenge baselines.');
-    if (!available.has('web.chromium'))
-        result.push('Install Chromium or Google Chrome for rendered browser probes.');
+    if (!available.has('web.chromium') && !mcp.some(item => item.id === 'mcp.chrome' && item.configured)) {
+        result.push('Install Chromium/Chrome for the local headless fallback, or use the configured mcp-chrome browser server.');
+    }
     if (!available.has('misc.tshark'))
         result.push('Install tshark for PCAP triage.');
     if (!available.has('web.mitmproxy'))
         result.push('Install mitmproxy for live HTTP(S) capture; tshark remains the offline PCAP tool.');
     if (!available.has('web.ffuf') && !available.has('web.feroxbuster'))
         result.push('Install ffuf or feroxbuster for controlled Web content discovery.');
+    if (!mcp.some(item => item.id === 'mcp.tavily' && item.configured)) {
+        result.push('When CVE or version research is needed, provide TAVILY_API_KEY to ctf_mcp_configure; the key must not be pasted into logs or JSON shown to the model.');
+    }
     if (!available.has('crypto.sage') && !available.has('python.z3') && !available.has('python.sympy')) {
         result.push('Install Sage, z3, or SymPy for crypto challenge solving.');
     }
     for (const item of mcp.filter(item => !item.configured)) {
-        result.push(`Configure ${item.id} through DSH_CTF_MCP_CONFIG or the host MCP client before using its external server.`);
+        if (item.id === 'mcp.tavily' || item.id === 'mcp.chrome')
+            continue;
+        result.push(`Configure ${item.id} through ctf_mcp_configure or the host MCP client before using its external server.`);
     }
     return result;
+}
+function isSecretPlaceholder(key, value) {
+    return value.startsWith('REPLACE_WITH_')
+        || key === 'TAVILY_API_KEY' && (value === 'TAVILY_API_KEY' || value === 'REPLACE_WITH_TAVILY_API_KEY');
 }
 //# sourceMappingURL=capabilities.js.map

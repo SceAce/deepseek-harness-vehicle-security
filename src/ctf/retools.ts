@@ -1,7 +1,8 @@
 import { mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-import { findExecutable, type ResolvedWorkspaceFile } from '../paths.js'
+import { findCtfExecutable } from './environment.js'
+import type { ResolvedWorkspaceFile } from '../paths.js'
 import { runCommand, type CommandOptions } from '../process.js'
 import { commandRecord, emptyResult, type CtfToolResultBase } from './types.js'
 
@@ -32,7 +33,7 @@ export async function queryRadare2(
   options: CommandOptions = {},
 ): Promise<R2QueryResult> {
   const base = emptyResult()
-  const r2 = await findExecutable('r2')
+  const r2 = await findCtfExecutable('r2', options.cwd)
   if (!r2) {
     base.status = 'missing_capability'
     base.limitations.push('radare2 is not installed.')
@@ -83,18 +84,19 @@ async function buildIdaScriptPlanImpl(
   options: CommandOptions,
 ): Promise<IdaScriptPlanResult> {
   const base = emptyResult()
-  const idaExecutable = await findExecutable('idat64')
-    ?? await findExecutable('idat')
-    ?? await findExecutable('ida64')
-    ?? await findExecutable('ida')
+  const idaExecutable = await findCtfExecutable('idat64', options.cwd)
+    ?? await findCtfExecutable('idat', options.cwd)
+    ?? await findCtfExecutable('ida64', options.cwd)
+    ?? await findCtfExecutable('ida', options.cwd)
   const script = buildIdaScript(file.relativePath, focus)
   const launcher = { executable: idaExecutable ?? 'idat64', argv: ['-A', '-Sanalysis.py', file.path] }
   let analysisOutput: string | null = null
   let scriptPath: string | null = null
   if (!idaExecutable) {
     base.status = 'missing_capability'
-    base.limitations.push('IDA CLI is not installed or not on PATH.')
-    base.nextActions.push({ tool: 'ctf_tool_setup', args: { target: 'ida_pro' }, reason: 'Install or expose the IDA CLI before running the script.' })
+    base.limitations.push('IDA CLI is not detected; the generated IDAPython script remains usable through the configured IDA MCP or the IDA UI. CLI is optional and only needed for batch execution.')
+    base.nextActions.push({ tool: 'mcp.ida_pro', args: { path: file.relativePath, focus }, reason: 'Use the configured IDA MCP to run the generated IDAPython analysis in the existing IDA database.' })
+    base.nextActions.push({ tool: 'ctf_tool_setup', args: { target: 'ida_pro' }, reason: 'Use this only when an IDA CLI batch fallback is specifically required.' })
   } else {
     base.status = 'ok'
     base.observations.push(`IDA CLI candidate detected: ${idaExecutable}.`)

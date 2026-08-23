@@ -1,4 +1,4 @@
-import { type ResolvedWorkspaceFile } from '../paths.js';
+import type { ResolvedWorkspaceFile } from '../paths.js';
 import { type CommandOptions } from '../process.js';
 import { type ToolInvocationRecord } from './types.js';
 export interface CtfArtifactProfile {

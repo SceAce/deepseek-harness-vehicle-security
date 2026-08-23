@@ -154,6 +154,7 @@ test('Codex CTF MCP initializes, lists tools, and probes crypto text', async t =
   const listed = await request('tools/list')
   assert.deepEqual(listed.result.tools.map(tool => tool.name), [
     'ctf_tool_audit',
+    'ctf_mcp_configure',
     'ctf_artifact_profile',
     'ctf_start',
     'ctf_re_profile',
@@ -180,6 +181,17 @@ test('Codex CTF MCP initializes, lists tools, and probes crypto text', async t =
   })
   assert.equal(probed.result.structuredContent.encodings[0].type, 'hex')
   assert.equal(probed.result.structuredContent.encodings[0].decodedPreview, 'ABC')
+
+  const configured = await request('tools/call', {
+    name: 'ctf_mcp_configure',
+    arguments: {
+      configPath: '/tmp/dsh-ctf-mcp-test.json',
+      includeChrome: true,
+      includeTavily: false,
+    },
+  })
+  assert.equal(configured.result.structuredContent.status, 'ok')
+  assert.deepEqual(configured.result.structuredContent.configured, ['mcp.chrome'])
 
   const reProfile = await request('tools/call', {
     name: 'ctf_re_profile',

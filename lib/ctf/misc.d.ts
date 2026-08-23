@@ -1,5 +1,5 @@
 import { type CtfArtifactProfile } from './artifact.js';
-import { type ResolvedWorkspaceFile } from '../paths.js';
+import type { ResolvedWorkspaceFile } from '../paths.js';
 import { type CommandOptions } from '../process.js';
 import { type CtfToolResultBase } from './types.js';
 export interface MiscTriageResult extends CtfToolResultBase {

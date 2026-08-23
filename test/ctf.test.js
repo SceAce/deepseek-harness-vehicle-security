@@ -21,6 +21,7 @@ const config = {
 
 const CTF_TOOL_NAMES = [
   'ctf_tool_audit',
+  'ctf_mcp_configure',
   'ctf_artifact_profile',
   'ctf_start',
   'ctf_re_profile',
@@ -224,8 +225,35 @@ test('ctf_tool_audit exposes local capability and external MCP state', async () 
   assert.ok(Array.isArray(result.capabilities))
   assert.ok(Array.isArray(result.mcp))
   assert.ok(result.mcp.some(item => item.id === 'mcp.ida_pro'))
+  assert.ok(result.mcp.some(item => item.id === 'mcp.chrome'))
+  assert.ok(result.mcp.some(item => item.id === 'mcp.tavily'))
   assert.ok(result.capabilities.some(item => item.id === 're.r2'))
   assert.ok(result.capabilities.some(item => item.id === 'pwn.pwndbg'))
+  assert.match(result.python.executable ?? '', /python/)
+  assert.ok('source' in result.python)
+  assert.ok('venv' in result.python)
+})
+
+test('ctf_mcp_configure writes key-only external MCP configuration without returning secrets', async t => {
+  const configPath = path.join(await mkdtemp(path.join(os.tmpdir(), 'dsh-ctf-mcp-')), 'ctf-mcp.json')
+  t.after(() => import('node:fs/promises').then(fs => fs.rm(path.dirname(configPath), { recursive: true, force: true })))
+  const registered = []
+  ctfPlugin.apply({ tools: { register: tool => registered.push(tool) } }, config)
+  const configure = registered.find(item => item.name === 'ctf_mcp_configure')
+  const result = await configure.execute({
+    configPath,
+    includeChrome: true,
+    includeTavily: true,
+    tavilyApiKey: 'test-tavily-secret',
+  }, { signal: new AbortController().signal })
+
+  assert.equal(result.status, 'ok')
+  assert.deepEqual(result.configured, ['mcp.chrome', 'mcp.tavily'])
+  assert.deepEqual(result.requiredSecrets, [])
+  assert.doesNotMatch(JSON.stringify(result), /test-tavily-secret/)
+  const document = JSON.parse(await import('node:fs/promises').then(fs => fs.readFile(configPath, 'utf8')))
+  assert.equal(document.mcpServers['mcp-chrome'].url, 'http://127.0.0.1:12306/mcp')
+  assert.equal(document.mcpServers['tavily-mcp'].env.TAVILY_API_KEY, 'test-tavily-secret')
 })
 
 test('ctf_crypto_probe detects simple hex text before script generation', async () => {
@@ -331,7 +359,7 @@ test('ctf_tool_setup enforces ordered human operations and return types', async 
   const registered = []
   ctfPlugin.apply({ tools: { register: tool => registered.push(tool) } }, config)
   const setup = registered.find(item => item.name === 'ctf_tool_setup')
-  const result = await setup.execute({ target: 'chrome_devtools_mcp' }, { signal: new AbortController().signal })
+  const result = await setup.execute({ target: 'chrome_mcp' }, { signal: new AbortController().signal })
 
   assert.equal(result.status, 'human_required')
   assert.ok(result.request.operationOrder.length >= 2)
