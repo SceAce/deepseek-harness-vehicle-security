@@ -235,6 +235,40 @@ test('ctf_tool_audit exposes local capability and external MCP state', async () 
   assert.ok('venv' in result.python)
 })
 
+test('CTF audit and start results are lossless through the real DSH tool runtime', async t => {
+  const workspace = await mkdtemp(path.join(os.tmpdir(), 'dsh-ctf-runtime-'))
+  t.after(() => import('node:fs/promises').then(fs => fs.rm(workspace, { recursive: true, force: true })))
+  await copyFile('/bin/true', path.join(workspace, 'pwn'))
+
+  const ctx = new Context()
+  await ctx.plugin(SystemPrompt)
+  await ctx.plugin(ToolRuntime, { mode: 'native' })
+  await ctx.plugin(ctfPlugin, {
+    ...config,
+    workspaceRoot: workspace,
+    commandTimeoutMs: 5000,
+  })
+
+  const signal = new AbortController().signal
+  const audit = await ctx.tools.execute({
+    callId: 'ctf-runtime-audit',
+    name: 'ctf_tool_audit',
+    arguments: {},
+    signal,
+  })
+  assert.equal(audit.isError, false)
+  assert.ok(audit.content.some(block => block.type === 'text'))
+
+  const start = await ctx.tools.execute({
+    callId: 'ctf-runtime-start',
+    name: 'ctf_start',
+    arguments: { objective: 'pwn runtime regression', path: 'pwn' },
+    signal,
+  })
+  assert.equal(start.isError, false)
+  assert.ok(start.content.some(block => block.type === 'text'))
+})
+
 test('ctf_mcp_configure writes key-only external MCP configuration without returning secrets', async t => {
   const configPath = path.join(await mkdtemp(path.join(os.tmpdir(), 'dsh-ctf-mcp-')), 'ctf-mcp.json')
   t.after(() => import('node:fs/promises').then(fs => fs.rm(path.dirname(configPath), { recursive: true, force: true })))

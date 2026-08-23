@@ -80,7 +80,7 @@ export function commandRecord(
   return {
     executable,
     argv: [...argv],
-    cwd,
+    ...(cwd === undefined ? {} : { cwd }),
     ok: result.ok,
     exitCode: result.exitCode,
     stdout: result.stdout,
