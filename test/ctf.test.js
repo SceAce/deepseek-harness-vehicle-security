@@ -249,6 +249,8 @@ test('ctf_pwn_profile returns structured binary facts for an ELF artifact', asyn
   assert.ok(!result.nextActions.some(action => action.tool === 'ctf_pwn_toolchain'))
   assert.ok(result.nextActions.some(action => action.tool === 'ctf_pwn_gdb_probe'))
   assert.ok(result.nextActions.some(action => action.tool === 'ctf_pwn_debug_probe'))
+  assert.deepEqual(result.binary.libcCandidates, [])
+  assert.ok(!result.nextActions.some(action => action.tool === 'ctf_one_gadget'))
   const hasSeccompEvidence = result.binary.imports.some(name => /^(prctl|seccomp|seccomp_init|syscall)$/.test(name))
   assert.equal(
     result.nextActions.some(action => action.tool === 'ctf_seccomp_profile'),

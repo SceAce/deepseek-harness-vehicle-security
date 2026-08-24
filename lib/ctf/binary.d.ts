@@ -14,6 +14,7 @@ export interface BinaryFactSummary {
         stripped: string;
     };
     imports: string[];
+    libcCandidates: string[];
     interestingStrings: Array<{
         offset: string;
         value: string;

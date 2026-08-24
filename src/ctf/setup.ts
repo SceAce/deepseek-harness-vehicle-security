@@ -180,7 +180,7 @@ function buildSetupRequest(target: CtfSetupTarget, context?: string): CtfHumanRe
             order: 1,
             kind: 'command',
             title: 'Install one_gadget as a user Ruby gem',
-            command: 'gem install --user-install --no-document one_gadget',
+            command: 'GEM_SPEC_CACHE=/tmp/dsh-ctf-gem-spec-cache gem install --user-install --no-document one_gadget',
             expectedSignal: 'Return the installation log or the exact package-manager error.',
           },
           {

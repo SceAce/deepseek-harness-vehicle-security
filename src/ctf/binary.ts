@@ -1,3 +1,5 @@
+import { readdir, stat } from 'node:fs/promises'
+import path from 'node:path'
 import { profileCtfArtifact, type CtfArtifactProfile } from './artifact.js'
 import { findCtfExecutable } from './environment.js'
 import type { ResolvedWorkspaceFile } from '../paths.js'
@@ -16,6 +18,7 @@ export interface BinaryFactSummary {
     stripped: string
   }
   imports: string[]
+  libcCandidates: string[]
   interestingStrings: Array<{ offset: string; value: string; tags: string[] }>
   checksec: string | null
 }
@@ -206,6 +209,7 @@ async function collectBinaryFacts(
       stripped: profile.artifact.fileType && /\bnot stripped\b/i.test(profile.artifact.fileType) ? 'disabled' : /\bstripped\b/i.test(profile.artifact.fileType ?? '') ? 'enabled' : 'unknown',
     },
     imports: [],
+    libcCandidates: [],
     interestingStrings: [],
     checksec: null,
   }
@@ -230,6 +234,7 @@ async function collectBinaryFacts(
     }
   }
 
+  binary.libcCandidates = await siblingLibcCandidates(file)
   const strings = await findCtfExecutable('strings', options.cwd)
   if (strings) {
     const capture = await runCommand(strings, ['-a', '-t', 'x', '-n', '5', '--', file.path], { ...options, maxOutputChars: Math.max(options.maxOutputChars ?? 60_000, 120_000) })
@@ -347,18 +352,38 @@ function pwnNextActions(artifact: CtfArtifactProfile, binary: BinaryFactSummary)
   if (binary.protections.nx !== 'disabled') {
     actions.push({ tool: 'ctf_rop_search', args: { path: artifact.path, query: 'pop|ret' }, reason: 'NX is enabled or unknown, so ROP candidates are useful before exploit scripting.' })
   }
-  actions.push({
-    tool: 'ctf_one_gadget',
-    args: { path: artifact.path, level: 0, maxResults: 80 },
-    reason: 'Use one_gadget when a matching libc is available and a ret2libc or libc-base control-flow path becomes plausible.',
-  })
-  if (binary.imports.some(name => /^(prctl|seccomp|seccomp_init|syscall)$/.test(name))) {
+  const hasSyscallRestrictionClue = binary.imports.some(name => /^(prctl|seccomp|seccomp_init|syscall)$/.test(name))
+    || binary.interestingStrings.some(item => /seccomp|sandbox|prctl|execve/i.test(item.value))
+  if (binary.libcCandidates.length > 0 && !hasSyscallRestrictionClue) {
+    actions.push({
+      tool: 'ctf_one_gadget',
+      args: { path: artifact.path, libcPath: binary.libcCandidates[0], level: 0, maxResults: 80 },
+      reason: 'A workspace libc is available and no syscall-restriction clue is present; enumerate libc gadgets for a possible ret2libc path.',
+    })
+  }
+  if (hasSyscallRestrictionClue) {
     actions.push({ tool: 'ctf_seccomp_profile', args: { path: artifact.path, format: 'disasm', limit: 1 }, reason: 'The binary exposes prctl/seccomp-related imports; dump the filter before selecting a syscall-constrained payload.' })
   }
   if (binary.imports.some(name => ['gets', 'strcpy', 'sprintf', 'scanf', 'read', 'recv'].includes(name))) {
     actions.push({ tool: 'ctf_pwn_debug_probe', args: { path: artifact.path, breakAt: 'main' }, reason: 'Input-handling imports exist; inspect runtime state near main and input reads.' })
   }
   return actions
+}
+
+async function siblingLibcCandidates(file: ResolvedWorkspaceFile): Promise<string[]> {
+  const directory = path.dirname(file.path)
+  const entries = await readdir(directory)
+  const candidates: string[] = []
+  for (const entry of entries.sort()) {
+    if (!/^libc(?:\.so(?:\..*)?|-[^/]+\.so(?:\..*)?)$/.test(entry)) continue
+    const candidate = path.join(directory, entry)
+    try {
+      if ((await stat(candidate)).isFile()) candidates.push(path.relative(file.root, candidate))
+    } catch {
+      // Ignore files removed during the profile.
+    }
+  }
+  return candidates
 }
 
 function reNextActions(artifact: CtfArtifactProfile, binary: BinaryFactSummary): CtfNextAction[] {
