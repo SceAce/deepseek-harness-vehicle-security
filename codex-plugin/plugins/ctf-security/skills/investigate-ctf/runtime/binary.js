@@ -281,6 +281,11 @@ function pwnNextActions(artifact, binary) {
     if (binary.protections.nx !== 'disabled') {
         actions.push({ tool: 'ctf_rop_search', args: { path: artifact.path, query: 'pop|ret' }, reason: 'NX is enabled or unknown, so ROP candidates are useful before exploit scripting.' });
     }
+    actions.push({
+        tool: 'ctf_one_gadget',
+        args: { path: artifact.path, level: 0, maxResults: 80 },
+        reason: 'Use one_gadget when a matching libc is available and a ret2libc or libc-base control-flow path becomes plausible.',
+    });
     if (binary.imports.some(name => /^(prctl|seccomp|seccomp_init|syscall)$/.test(name))) {
         actions.push({ tool: 'ctf_seccomp_profile', args: { path: artifact.path, format: 'disasm', limit: 1 }, reason: 'The binary exposes prctl/seccomp-related imports; dump the filter before selecting a syscall-constrained payload.' });
     }

@@ -388,6 +388,7 @@ function recommendations(capabilities: CtfCapability[], modules: CtfCapability[]
   if (!available.has('pwn.pwninit')) result.push('Install or expose pwninit for deterministic loader/libc selection, patching, backup, and restore.')
   if (!available.has('python.pwntools')) result.push('Install pwntools for pwn process automation.')
   if (!available.has('pwn.ropgadget') && !available.has('pwn.ropper')) result.push('Install ROPgadget or ropper for gadget enumeration.')
+  if (!available.has('pwn.one_gadget')) result.push('Install one_gadget for libc one-gadget candidate enumeration.')
   if (!available.has('re.ida_cli') && !mcp.some(item => item.id === 'mcp.ida_pro' && item.configured)) {
     result.push('IDA CLI is optional: use the configured IDA MCP for IDAPython/decompiler work, or expose idat64/idat only for batch fallback.')
   }
@@ -519,6 +520,15 @@ const TOOL_BINDINGS: ToolBindingSpec[] = [
     anyBackend: true,
     fallbackTool: 'ctf_pwn_profile',
     exampleArgs: { path: 'pwn', query: 'pop|ret', maxResults: 80 },
+  },
+  {
+    tool: 'ctf_one_gadget',
+    category: 'pwn',
+    purpose: 'Enumerate libc one-gadget offsets, invocation forms, and constraints.',
+    when: 'A matching libc is available and a ret2libc or libc-base control-flow hypothesis is plausible.',
+    backendCapabilities: ['pwn.one_gadget'],
+    fallbackTool: 'ctf_pwn_profile',
+    exampleArgs: { path: 'pwn', libcPath: 'libc.so.6', level: 0, maxResults: 80 },
   },
   {
     tool: 'ctf_seccomp_profile',

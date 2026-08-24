@@ -166,6 +166,7 @@ test('Codex CTF MCP initializes, lists tools, and probes crypto text', async t =
     'ctf_pwn_debug_probe',
     'ctf_pwn_gdb_probe',
     'ctf_rop_search',
+    'ctf_one_gadget',
     'ctf_seccomp_profile',
     'ctf_crypto_probe',
     'ctf_misc_triage',
@@ -225,6 +226,14 @@ test('Codex CTF MCP initializes, lists tools, and probes crypto text', async t =
   assert.equal(r2.result.structuredContent.status, 'ok')
   assert.equal(r2.result.structuredContent.query.commands[0], 'ij')
 
+  const oneGadget = await request('tools/call', {
+    name: 'ctf_one_gadget',
+    arguments: { workspaceRoot: root, path: 'fixtures/sample.asc' },
+  })
+  assert.equal(oneGadget.result.isError, false)
+  assert.equal(oneGadget.result.structuredContent.status, 'missing_capability')
+  assert.equal(oneGadget.result.structuredContent.target.source, 'none')
+
   const start = await request('tools/call', {
     name: 'ctf_start',
     arguments: {
@@ -266,6 +275,13 @@ test('Codex CTF MCP initializes, lists tools, and probes crypto text', async t =
   })
   assert.equal(seccompSetup.result.structuredContent.target, 'seccomp_tools')
   assert.ok(seccompSetup.result.structuredContent.request.operationOrder.every(operation => operation.command || operation.instruction))
+
+  const oneGadgetSetup = await request('tools/call', {
+    name: 'ctf_tool_setup',
+    arguments: { target: 'one_gadget' },
+  })
+  assert.equal(oneGadgetSetup.result.structuredContent.target, 'one_gadget')
+  assert.ok(oneGadgetSetup.result.structuredContent.request.operationOrder.every(operation => operation.command || operation.instruction))
 
   const humanRequest = await request('tools/call', {
     name: 'ctf_human_request',

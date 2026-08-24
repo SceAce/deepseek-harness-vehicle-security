@@ -11,6 +11,7 @@ import { configureCtfMcp } from './mcp.js'
 import { profilePcapArtifact, triageMiscArtifact } from './misc.js'
 import { runCtfPython } from './python.js'
 import { routeCtfStart } from './router.js'
+import { searchOneGadgets } from './one-gadget.js'
 import { buildIdaScriptPlan, queryRadare2 } from './retools.js'
 import { profileSeccomp } from './seccomp.js'
 import { createToolSetupRequest, type CtfSetupTarget } from './setup.js'
@@ -366,6 +367,36 @@ export function apply(ctx: Context, config: Config): void {
   }))
 
   ctx.tools.register(defineTool({
+    name: 'ctf_one_gadget',
+    description: 'Search one_gadget candidates in a local libc. Pass libcPath explicitly or keep libc-*.so beside the challenge binary; use after pwninit when ret2libc or libc-base control flow is relevant.',
+    parameters: {
+      path: { type: 'string', required: true, description: 'Challenge binary or libc path relative to the active workspace' },
+      libcPath: { type: 'string', description: 'Optional libc path relative to the active workspace; sibling libc files are auto-detected when omitted' },
+      level: { type: 'integer', description: 'one_gadget constraint level from 0 to 5; defaults to 0' },
+      near: { type: 'string', description: 'Optional symbol or address filter passed to one_gadget' },
+      raw: { type: 'boolean', description: 'Return raw offsets when supported by one_gadget' },
+      maxResults: { type: 'integer', description: 'Maximum parsed gadget entries, from 1 to 500; defaults to 80' },
+    },
+    output: jsonOutput,
+    timeoutMs: config.commandTimeoutMs * 2,
+    isConcurrencySafe: () => true,
+    async execute(args, exec) {
+      const file = await workspaceFile(config, exec, args.path)
+      return searchOneGadgets(file, {
+        libcPath: args.libcPath,
+        level: args.level,
+        near: args.near,
+        raw: args.raw,
+        maxResults: args.maxResults,
+      }, {
+        ...commandOptions,
+        maxFileBytes: config.maxFileBytes,
+        signal: exec.signal,
+      }) as unknown as Promise<JsonValue>
+    },
+  }))
+
+  ctx.tools.register(defineTool({
     name: 'ctf_seccomp_profile',
     description: 'Inspect seccomp filters installed by a local Pwn binary with seccomp-tools. Use when imports, strings, or runtime evidence suggest prctl, seccomp, sandboxing, or syscall restrictions.',
     parameters: {
@@ -627,6 +658,7 @@ function parseSetupTarget(value: string): CtfSetupTarget {
     value === 'gdb_pwndbg'
     || value === 'ida_pro'
     || value === 'r2'
+    || value === 'one_gadget'
     || value === 'seccomp_tools'
     || value === 'chrome_mcp'
     || value === 'chrome_devtools_mcp'
@@ -634,7 +666,7 @@ function parseSetupTarget(value: string): CtfSetupTarget {
     || value === 'python_ctf_env'
     || value === 'blackarch_repo'
   ) return value
-  throw new Error('target must be gdb_pwndbg, ida_pro, r2, seccomp_tools, chrome_mcp, chrome_devtools_mcp, mitmproxy, python_ctf_env, or blackarch_repo')
+  throw new Error('target must be gdb_pwndbg, ida_pro, r2, one_gadget, seccomp_tools, chrome_mcp, chrome_devtools_mcp, mitmproxy, python_ctf_env, or blackarch_repo')
 }
 
 function parseHumanRequestType(value: string) {

@@ -1,7 +1,7 @@
 interface:
   display_name: "Solve CTF Pwn"
   short_description: "Tool-first binary exploitation workflow"
-  default_prompt: "使用 $solve-ctf-pwn。除工具名、命令、路径、代码和原始日志外使用中文。每个 Pwn 二进制必须先调用 ctf_pwninit(mode=prepare)，它负责初始化工作区并在存在时切换匹配的 ld/libc，然后根据证据问题选择 ctf_pwn_profile、ctf_re_r2_query、ctf_pwn_gdb_probe、ctf_pwn_debug_probe 或 ctf_rop_search。所有 Python 命令必须使用 /home/source/tools/PyVenv/CTF/bin/python。"
+  default_prompt: "使用 $solve-ctf-pwn。除工具名、命令、路径、代码和原始日志外使用中文。每个 Pwn 二进制必须先调用 ctf_pwninit(mode=prepare)，它负责初始化工作区并在存在时切换匹配的 ld/libc，然后根据证据问题选择 ctf_pwn_profile、ctf_re_r2_query、ctf_pwn_gdb_probe、ctf_pwn_debug_probe、ctf_rop_search 或 ctf_one_gadget。所有 Python 命令必须使用 /home/source/tools/PyVenv/CTF/bin/python。"
 
 dependencies:
   tools:

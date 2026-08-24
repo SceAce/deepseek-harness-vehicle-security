@@ -5,6 +5,7 @@ export type CtfSetupTarget =
   | 'gdb_pwndbg'
   | 'ida_pro'
   | 'r2'
+  | 'one_gadget'
   | 'seccomp_tools'
   | 'chrome_mcp'
   | 'chrome_devtools_mcp'
@@ -167,6 +168,41 @@ function buildSetupRequest(target: CtfSetupTarget, context?: string): CtfHumanRe
           log: 'package installation, version, and seccomp dump output',
           screenshot: 'terminal screenshot text showing installation or ptrace status',
           ocr_text: 'recognized text containing the version or permission error',
+        },
+      )
+    case 'one_gadget':
+      return requestFromOperations(
+        'start_service',
+        'Install or refresh one_gadget',
+        'Pwn analysis needs libc one_gadget candidates after the challenge runtime and libc have been identified.',
+        [
+          {
+            order: 1,
+            kind: 'command',
+            title: 'Install one_gadget as a user Ruby gem',
+            command: 'gem install --user-install --no-document one_gadget',
+            expectedSignal: 'Return the installation log or the exact package-manager error.',
+          },
+          {
+            order: 2,
+            kind: 'command',
+            title: 'Expose and verify the user gem executable',
+            command: `ONE_GADGET_BIN="$(ruby -e 'puts Gem.user_dir')/bin"; export PATH="$ONE_GADGET_BIN:$PATH"; command -v one_gadget; one_gadget --version`,
+            expectedSignal: 'Return the resolved one_gadget path and version banner.',
+          },
+          {
+            order: 3,
+            kind: 'command',
+            title: 'Verify against the challenge libc',
+            command: 'one_gadget --level 0 -- ./libc-CHALLENGE.so',
+            expectedSignal: 'Return the gadget offsets and constraints, or the exact libc/parser error.',
+          },
+        ],
+        context,
+        {
+          log: 'gem installation, version, and one_gadget output',
+          screenshot: 'terminal screenshot text showing the installation or libc analysis',
+          ocr_text: 'recognized text containing the executable path, version, offsets, or error',
         },
       )
     case 'chrome_mcp':

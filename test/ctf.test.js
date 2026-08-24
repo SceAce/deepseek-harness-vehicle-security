@@ -34,6 +34,7 @@ const CTF_TOOL_NAMES = [
   'ctf_re_r2_query',
   'ctf_re_ida_script',
   'ctf_rop_search',
+  'ctf_one_gadget',
   'ctf_seccomp_profile',
   'ctf_crypto_probe',
   'ctf_misc_triage',
@@ -448,6 +449,54 @@ test('ctf_seccomp_profile is callable and returns a structured result', async t 
   assert.ok(Array.isArray(result.commands))
 })
 
+test('ctf_one_gadget resolves a sibling libc and returns parsed constraints', async t => {
+  const workspace = await mkdtemp(path.join(os.tmpdir(), 'dsh-ctf-one-gadget-'))
+  const gemHome = await mkdtemp(path.join(os.tmpdir(), 'dsh-ctf-one-gem-home-'))
+  t.after(async () => {
+    await import('node:fs/promises').then(fs => fs.rm(workspace, { recursive: true, force: true }))
+    await import('node:fs/promises').then(fs => fs.rm(gemHome, { recursive: true, force: true }))
+  })
+  await writeFile(path.join(workspace, 'pwn'), 'challenge\n')
+  await writeFile(path.join(workspace, 'libc-2.31.so'), 'libc fixture\n')
+  const bin = path.join(gemHome, 'bin')
+  await mkdir(bin)
+  const oneGadget = path.join(bin, 'one_gadget')
+  await writeFile(oneGadget, [
+    '#!/bin/sh',
+    'printf "%s\\n" "0x4f2c5 execve(\\"/bin/sh\\", rsp+0x40, environ)" "constraints:" "  rsp & 0xf == 0"',
+    '',
+  ].join('\n'))
+  await chmod(oneGadget, 0o755)
+
+  const previous = process.env.GEM_HOME
+  process.env.GEM_HOME = gemHome
+  try {
+    const registered = []
+    ctfPlugin.apply({ tools: { register: tool => registered.push(tool) } }, {
+      ...config,
+      workspaceRoot: undefined,
+    })
+    const tool = registered.find(item => item.name === 'ctf_one_gadget')
+    const result = await tool.execute(
+      { path: 'pwn', level: 0, maxResults: 10 },
+      {
+        signal: new AbortController().signal,
+        agent: { session: { header: { cwd: workspace } } },
+      },
+    )
+
+    assert.equal(result.status, 'ok')
+    assert.equal(result.target.source, 'sibling')
+    assert.match(result.target.path, /libc-2\.31\.so$/)
+    assert.equal(result.gadgets[0].offset, '0x4f2c5')
+    assert.deepEqual(result.gadgets[0].constraints, ['rsp & 0xf == 0'])
+    assert.equal(result.commands[0].executable, oneGadget)
+  } finally {
+    if (previous === undefined) delete process.env.GEM_HOME
+    else process.env.GEM_HOME = previous
+  }
+})
+
 test('ctf_tool_audit exposes local capability and external MCP state', async () => {
   const registered = []
   ctfPlugin.apply({ tools: { register: tool => registered.push(tool) } }, {
@@ -475,6 +524,7 @@ test('ctf_tool_audit exposes local capability and external MCP state', async () 
   assert.ok(r2Binding.exampleArgs.commands.includes('aaa'))
   assert.ok(result.capabilities.some(item => item.id === 're.r2'))
   assert.ok(result.capabilities.some(item => item.id === 'pwn.pwndbg'))
+  assert.ok(result.capabilities.some(item => item.id === 'pwn.one_gadget'))
   assert.ok(result.capabilities.some(item => item.id === 'web.mcp_chrome_bridge'))
   assert.match(result.python.executable ?? '', /python/)
   assert.ok('source' in result.python)

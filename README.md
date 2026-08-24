@@ -168,6 +168,7 @@ CTF 侧目标是工具优先：先审计本机能力、初检文件或 URL，再
 | `ctf_pwn_debug_probe` | 用 GDB batch 采集入口点、寄存器、栈、反汇编和回溯 |
 | `ctf_pwn_gdb_probe` | 用 GDB/Pwndbg 执行 `context`、`vmmap`、寄存器和回溯探针 |
 | `ctf_rop_search` | 调用 ROPgadget 或 ropper 搜索 gadget |
+| `ctf_one_gadget` | 对题目目录中的匹配 libc 调用 one_gadget，返回偏移、调用形式和约束 |
 | `ctf_seccomp_profile` | 调用 seccomp-tools 转储 seccomp 规则并提取 syscall 名称 |
 | `ctf_crypto_probe` | 检测 hex/base64/binary-ascii、熵、hash 和单字节 XOR 候选 |
 | `ctf_misc_triage` | 用 binwalk、exiftool、7z、strings、zsteg 做 Misc/取证初检 |
@@ -258,7 +259,7 @@ export DSH_CTF_MCP_CONFIG="$PWD/ctf-mcp.json"
 - 配置文件默认写入 `~/.config/dsh/ctf-mcp.json`，也可以通过 `DSH_CTF_MCP_CONFIG` 或 `configPath` 指定；
 - 仓库内置的 `.mcp.json` 只启动 CTF 自身的本地 MCP，不会把外部 server 与车联网插件混在一起。
 
-模型的工具策略是：能力或类别未知时调用 `ctf_tool_audit`/`ctf_start` 获取绑定和选择；目标与后端明确时可以直接调用具体工具。Pwn 二进制有一个固定首步：模型必须先调用 `ctf_pwninit(mode="prepare")`，它会先执行本地初始化；发现匹配的 `ld`/`libc` 时继续切换运行时，没有匹配源时自动使用 `--only-init`，然后再进入 `ctf_pwn_profile` 和后续工具选择。完成该首步后，模型仍根据证据问题自行决定是否使用 r2、IDA、GDB/Pwndbg、ROP 或 seccomp-tools，不要求每道题执行全部工具。工具绑定报告为 ready 时，优先调用结构化 CTF 工具；只有工具明确失败或存在具体能力缺口时，才用通用 shell 重复同一操作。IDA MCP 已配置时优先使用 MCP；未配置时，插件也会检测本机 IDA CLI。当前机器的默认 CLI 候选包括：
+模型的工具策略是：能力或类别未知时调用 `ctf_tool_audit`/`ctf_start` 获取绑定和选择；目标与后端明确时可以直接调用具体工具。Pwn 二进制有一个固定首步：模型必须先调用 `ctf_pwninit(mode="prepare")`，它会先执行本地初始化；发现匹配的 `ld`/`libc` 时继续切换运行时，没有匹配源时自动使用 `--only-init`，然后再进入 `ctf_pwn_profile` 和后续工具选择。完成该首步后，模型仍根据证据问题自行决定是否使用 r2、IDA、GDB/Pwndbg、ROP、one_gadget 或 seccomp-tools，不要求每道题执行全部工具。工具绑定报告为 ready 时，优先调用结构化 CTF 工具；只有工具明确失败或存在具体能力缺口时，才用通用 shell 重复同一操作。IDA MCP 已配置时优先使用 MCP；未配置时，插件也会检测本机 IDA CLI。当前机器的默认 CLI 候选包括：
 
 ```text
 /home/source/CTF_PWN/tools/IDA/IDA-Pro-9.3/IDA-9-3/idat
@@ -280,7 +281,7 @@ export DSH_CTF_MCP_CONFIG="$PWD/ctf-mcp.json"
 | mitmproxy/mitmweb | 实时 HTTP(S) 拦截、重放和流量查看 | `ctf_web_capture_probe` 检查并交接长驻服务 |
 | TShark | 离线 PCAP 协议和会话统计 | `ctf_pcap_profile` |
 | pwntools、ROPgadget、ropper、checksec | Pwn 自动化、gadget 和保护检查 | 由 `ctf_tool_audit` 探测，缺失时再安装 |
-| patchelf、strace、ltrace、seccomp-tools | ELF 元数据、系统调用、库调用和 seccomp | 由 `ctf_tool_audit` 探测；有 `prctl`/sandbox 线索时调用 `ctf_seccomp_profile`；seccomp-tools 使用 Ruby user gem 安装 |
+| patchelf、strace、ltrace、one_gadget、seccomp-tools | ELF 元数据、系统调用、库调用、libc gadget 和 seccomp | 由 `ctf_tool_audit` 探测；one_gadget/seccomp-tools 使用 Ruby user gem 安装 |
 | ffuf、feroxbuster、httpx、sqlmap | Web 内容发现和结构化验证 | 由 `ctf_tool_audit` 探测；请求工具仍优先使用 curl |
 | Ghidra、angr、Z3、Sage、capa、FLOSS | 复杂反编译、符号执行、约束和样本画像 | 作为后续能力，先审计后调用 |
 
@@ -329,7 +330,7 @@ npx @deepseek-ai/dsh@next web
 ```text
 先用 ctf_start 分析 chall，类别自动判断。
 使用 ctf_tool_audit 检查本机 CTF 工具。
-对 chall 先调用 `ctf_pwninit`，再根据漏洞假设从 nextActions/toolChoices 中选择 `ctf_pwn_profile`、GDB/Pwndbg、r2、ROP 或 seccomp 工具。
+对 chall 先调用 `ctf_pwninit`，再根据漏洞假设从 nextActions/toolChoices 中选择 `ctf_pwn_profile`、GDB/Pwndbg、r2、ROP、one_gadget 或 seccomp 工具。
 如果工作区同时有 `ld-*.so*` 和 `libc-*.so*`，`ctf_pwninit` 会先切换运行时，再调用 `ctf_pwn_gdb_probe` 验证目标 glibc 已加载。
 Python 辅助代码优先调用 `ctf_python_exec`，它固定使用 `/home/source/tools/PyVenv/CTF/bin/python`。
 对 cipher.txt 做 ctf_crypto_probe，先不要写脚本。

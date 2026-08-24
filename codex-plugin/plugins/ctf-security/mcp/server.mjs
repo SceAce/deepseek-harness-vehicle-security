@@ -200,6 +200,24 @@ const tools = [
     },
   },
   {
+    name: 'ctf_one_gadget',
+    description: 'Search one_gadget candidates in a local libc. Pass libcPath explicitly or keep libc-*.so beside the challenge binary.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ...workspaceProperties,
+        path: { type: 'string' },
+        libcPath: { type: 'string' },
+        level: { type: 'integer', minimum: 0, maximum: 5 },
+        near: { type: 'string' },
+        raw: { type: 'boolean' },
+        maxResults: { type: 'integer', minimum: 1, maximum: 500 },
+      },
+      required: ['workspaceRoot', 'path'],
+      additionalProperties: false,
+    },
+  },
+  {
     name: 'ctf_seccomp_profile',
     description: 'Inspect a local Pwn binary seccomp filter with seccomp-tools and return raw rules plus syscall names.',
     inputSchema: {
@@ -314,7 +332,7 @@ const tools = [
     inputSchema: {
       type: 'object',
       properties: {
-        target: { type: 'string', enum: ['gdb_pwndbg', 'ida_pro', 'r2', 'seccomp_tools', 'chrome_mcp', 'chrome_devtools_mcp', 'mitmproxy', 'python_ctf_env', 'blackarch_repo'] },
+        target: { type: 'string', enum: ['gdb_pwndbg', 'ida_pro', 'r2', 'one_gadget', 'seccomp_tools', 'chrome_mcp', 'chrome_devtools_mcp', 'mitmproxy', 'python_ctf_env', 'blackarch_repo'] },
         context: { type: 'string' },
       },
       required: ['target'],
@@ -498,6 +516,16 @@ async function callTool(name, args) {
         maxResults: args.maxResults,
       }, commandOptions)
     }
+    case 'ctf_one_gadget': {
+      const { searchOneGadgets } = await runtime('one-gadget')
+      return searchOneGadgets(await workspaceFile(args), {
+        libcPath: args.libcPath,
+        level: args.level,
+        near: args.near,
+        raw: args.raw,
+        maxResults: args.maxResults,
+      }, commandOptions)
+    }
     case 'ctf_seccomp_profile': {
       const { profileSeccomp } = await runtime('seccomp')
       return profileSeccomp(await workspaceFile(args), {
@@ -559,7 +587,7 @@ async function callTool(name, args) {
     case 'ctf_tool_setup': {
       const { createToolSetupRequest } = await runtime('setup')
       const target = requireString(args.target, 'target')
-      if (!['gdb_pwndbg', 'ida_pro', 'r2', 'seccomp_tools', 'chrome_mcp', 'chrome_devtools_mcp', 'mitmproxy', 'python_ctf_env', 'blackarch_repo'].includes(target)) {
+      if (!['gdb_pwndbg', 'ida_pro', 'r2', 'one_gadget', 'seccomp_tools', 'chrome_mcp', 'chrome_devtools_mcp', 'mitmproxy', 'python_ctf_env', 'blackarch_repo'].includes(target)) {
         throw new Error(`unknown setup target: ${target}`)
       }
       return createToolSetupRequest(target, typeof args.context === 'string' ? args.context : undefined)

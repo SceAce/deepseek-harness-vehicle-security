@@ -1,5 +1,5 @@
 import { type HumanRequestResult } from './human.js';
-export type CtfSetupTarget = 'gdb_pwndbg' | 'ida_pro' | 'r2' | 'seccomp_tools' | 'chrome_mcp' | 'chrome_devtools_mcp' | 'mitmproxy' | 'python_ctf_env' | 'blackarch_repo';
+export type CtfSetupTarget = 'gdb_pwndbg' | 'ida_pro' | 'r2' | 'one_gadget' | 'seccomp_tools' | 'chrome_mcp' | 'chrome_devtools_mcp' | 'mitmproxy' | 'python_ctf_env' | 'blackarch_repo';
 export interface ToolSetupRequestResult extends HumanRequestResult {
     target: CtfSetupTarget;
 }

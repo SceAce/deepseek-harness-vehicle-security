@@ -126,6 +126,7 @@ export function toolGraphForCategory(category: ResolvedCtfCategory): CtfToolGrap
           { tool: 'mcp.gdb_pwndbg', role: 'dispatch interactive or stateful debugger MCP operations', when: 'GDB/Pwndbg MCP is configured' },
           { tool: 'ctf_pwn_debug_probe', role: 'collect registers, stack, maps, and branch context', when: 'runtime validation is needed' },
           { tool: 'ctf_rop_search', role: 'enumerate ROP gadgets', when: 'ROP is plausible or NX is enabled' },
+          { tool: 'ctf_one_gadget', role: 'enumerate libc one-gadget offsets and constraints', when: 'a matching libc is available and ret2libc control flow is plausible' },
           { tool: 'ctf_seccomp_profile', role: 'dump seccomp filters and syscall restrictions', when: 'prctl, seccomp, sandbox, or syscall restriction evidence exists' },
           { tool: 'mcp.tavily', role: 'search libc, CVE, and version context', when: 'external vulnerability or library-version context is required and Tavily MCP is configured' },
           { tool: 'ctf_human_request', role: 'handoff service/device/GUI operation', when: 'the process or target must be started by a person' },
@@ -141,6 +142,7 @@ export function toolGraphForCategory(category: ResolvedCtfCategory): CtfToolGrap
           { from: 'ctf_pwn_profile', to: 'mcp.gdb_pwndbg', condition: 'GDB/Pwndbg MCP is configured and interactive debugger state is required' },
           { from: 'ctf_pwn_profile', to: 'ctf_pwn_debug_probe', condition: 'input reachability or runtime state is unknown' },
           { from: 'ctf_pwn_profile', to: 'ctf_rop_search', condition: 'gadget-based control flow is relevant' },
+          { from: 'ctf_pwn_profile', to: 'ctf_one_gadget', condition: 'matching libc is available and a ret2libc path is relevant' },
           { from: 'ctf_pwn_profile', to: 'ctf_seccomp_profile', condition: 'prctl/seccomp/sandbox evidence is present' },
           { from: 'ctf_pwn_profile', to: 'mcp.tavily', condition: 'CVE, libc, or tool-version lookup is required' },
           { from: 'ctf_pwn_profile', to: 'ctf_human_request', condition: 'target service or device is not available to tools' },
@@ -289,6 +291,7 @@ function choicesForCategory(
       choice(audit, 'ctf_pwn_gdb_probe', { ...pathArgs, breakAt: 'main' }, 'Use when heap/runtime state, mappings, or Pwndbg context matter.'),
       choice(audit, 'ctf_pwn_debug_probe', { ...pathArgs, breakAt: 'main' }, 'Use when generic GDB registers, stack, or a breakpoint are enough.'),
       choice(audit, 'ctf_rop_search', { ...pathArgs, query: 'pop|ret', maxResults: 80 }, 'Use when NX or a gadget-based control-flow path is relevant.'),
+      choice(audit, 'ctf_one_gadget', { ...pathArgs, level: 0, maxResults: 80 }, 'Use when a matching libc is available and a ret2libc or libc-base control-flow path is relevant.'),
       choice(audit, 'ctf_seccomp_profile', { ...pathArgs, format: 'disasm', limit: 1 }, 'Use when imports or runtime evidence show prctl, seccomp, sandboxing, or syscall restrictions.'),
     ]
   }
