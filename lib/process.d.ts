@@ -3,6 +3,7 @@ export interface CommandOptions {
     timeoutMs?: number;
     maxOutputChars?: number;
     cwd?: string;
+    env?: NodeJS.ProcessEnv;
 }
 export interface CommandResult {
     ok: boolean;

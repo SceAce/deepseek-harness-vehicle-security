@@ -2,6 +2,7 @@ import { constants } from 'node:fs'
 import { access, readdir } from 'node:fs/promises'
 import path from 'node:path'
 import { findExecutable } from '../paths.js'
+import type { CommandOptions, CommandResult } from '../process.js'
 
 export interface CtfPythonEnvironment {
   policy: 'fixed'
@@ -44,6 +45,34 @@ export async function findCtfExecutable(name: string, cwd = process.cwd()): Prom
   return findExecutable(name, environment.searchPath)
 }
 
+export function ctfCommandOptions(
+  executable: string,
+  options: CommandOptions = {},
+): CommandOptions {
+  const gemHome = rubyGemHomeForExecutable(executable, options.env)
+  if (!gemHome) return options
+  const inheritedGemPath = options.env?.GEM_PATH ?? process.env.GEM_PATH ?? ''
+  const gemPath = [...new Set([
+    gemHome,
+    ...inheritedGemPath.split(path.delimiter).filter(Boolean),
+  ])].join(path.delimiter)
+  return {
+    ...options,
+    env: {
+      ...options.env,
+      GEM_HOME: gemHome,
+      GEM_PATH: gemPath,
+    },
+  }
+}
+
+export function isRubyGemBackendFailure(
+  result: Pick<CommandResult, 'stdout' | 'stderr' | 'error'>,
+): boolean {
+  const output = `${result.error ?? ''}\n${result.stdout}\n${result.stderr}`
+  return /Gem::(?:GemNotFoundException|MissingSpecError)|can't find gem|cannot load such file -- (?:one_gadget|seccomp-tools)|Could not find gem/i.test(output)
+}
+
 export async function findCtfIdaExecutable(cwd = process.cwd()): Promise<string | null> {
   const configured = expandHome(process.env.DSH_CTF_IDA?.trim() ?? '')
   const searchPath = await ctfSearchPath(cwd)
@@ -67,10 +96,64 @@ export async function ctfSearchPath(cwd = process.cwd(), selectedPythonBin?: str
     selectedPythonBin,
     DEFAULT_CTF_PYTHON && path.dirname(DEFAULT_CTF_PYTHON),
     ...(await discoverRubyGemBins()),
+    ...discoverGemPathBins(),
     ...(process.env.PATH ?? '').split(path.delimiter),
   ]
   return [...new Set(directories.filter((item): item is string => Boolean(item && item.trim())))]
     .join(path.delimiter)
+}
+
+function discoverGemPathBins(): string[] {
+  const roots = [
+    process.env.GEM_HOME,
+    ...(process.env.GEM_PATH ?? '').split(path.delimiter),
+  ].filter((item): item is string => Boolean(item && item.trim()))
+  return roots.map(root => path.join(root, 'bin'))
+}
+
+function rubyGemHomeForExecutable(
+  executable: string,
+  environment: NodeJS.ProcessEnv = process.env,
+): string | null {
+  const resolved = path.resolve(executable)
+  const bindir = path.dirname(resolved)
+  const candidates = [
+    environment.GEM_HOME,
+    ...(environment.GEM_PATH ?? '').split(path.delimiter),
+    ...defaultRubyGemHomes(),
+  ].filter((item): item is string => Boolean(item && item.trim()))
+  for (const candidate of [...new Set(candidates)]) {
+    if (path.resolve(candidate, 'bin') === bindir) return path.resolve(candidate)
+  }
+  return inferDefaultRubyGemHome(bindir)
+}
+
+function defaultRubyGemHomes(): string[] {
+  const home = process.env.HOME
+  if (!home) return []
+  const version = process.env.RUBY_VERSION?.trim()
+  if (!version) return []
+  return defaultRubyGemPrefixes(home).map(root => path.join(root, version))
+}
+
+function inferDefaultRubyGemHome(bindir: string): string | null {
+  const home = process.env.HOME
+  if (!home) return null
+  for (const root of defaultRubyGemPrefixes(home)) {
+    const relative = path.relative(root, bindir)
+    const parts = relative.split(path.sep)
+    if (parts.length === 2 && parts[1] === 'bin' && parts[0] !== '..') {
+      return path.join(root, parts[0])
+    }
+  }
+  return null
+}
+
+function defaultRubyGemPrefixes(home: string): string[] {
+  return [
+    path.join(home, '.local', 'share', 'gem', 'ruby'),
+    path.join(home, '.gem', 'ruby'),
+  ]
 }
 
 async function discoverRubyGemBins(): Promise<string[]> {

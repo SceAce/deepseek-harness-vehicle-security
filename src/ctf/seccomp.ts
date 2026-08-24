@@ -1,6 +1,6 @@
 import type { ResolvedWorkspaceFile } from '../paths.js'
 import { runCommand, type CommandOptions } from '../process.js'
-import { findCtfExecutable } from './environment.js'
+import { ctfCommandOptions, findCtfExecutable, isRubyGemBackendFailure } from './environment.js'
 import { commandRecord, emptyResult, type CtfToolResultBase } from './types.js'
 
 export type SeccompDumpFormat = 'disasm' | 'raw' | 'inspect'
@@ -63,7 +63,7 @@ export async function profileSeccomp(
 
   const argv = buildDumpArgv(file.path, targetArgv, format, limit)
   const capture = await runCommand(executable, argv, {
-    ...options,
+    ...ctfCommandOptions(executable, options),
     maxOutputChars: Math.max(options.maxOutputChars ?? 60_000, 120_000),
   })
   const rawOutput = [capture.stdout, capture.stderr].filter(Boolean).join('\n').trim() || null
@@ -74,8 +74,17 @@ export async function profileSeccomp(
   if (capture.ok) {
     base.observations.push(`seccomp dump returned ${rules.length} rule lines and ${syscalls.length} syscall names.`)
   } else {
-    base.status = 'failed'
-    base.limitations.push(`seccomp-tools exited with ${capture.exitCode ?? 'no status'}: ${capture.error ?? capture.stderr.trim()}`)
+    base.status = isRubyGemBackendFailure(capture) ? 'missing_capability' : 'failed'
+    if (base.status === 'missing_capability') {
+      base.limitations.push('The seccomp-tools wrapper was found, but its Ruby gem backend is missing from the active RubyGems environment.')
+      base.nextActions.push({
+        tool: 'ctf_tool_setup',
+        args: { target: 'seccomp_tools' },
+        reason: 'Restore the seccomp-tools Ruby gem and verify the wrapper with the same GEM_HOME/GEM_PATH.',
+      })
+    } else {
+      base.limitations.push(`seccomp-tools exited with ${capture.exitCode ?? 'no status'}: ${capture.error ?? capture.stderr.trim()}`)
+    }
     if (/operation not permitted|ptrace|permission denied/i.test(`${capture.error ?? ''}\n${capture.stderr}`)) {
       base.limitations.push('The host denied ptrace-based seccomp inspection; run the same command in a session with ptrace permission.')
     }
@@ -87,7 +96,7 @@ export async function profileSeccomp(
   })
   return {
     ...base,
-    status: capture.ok ? 'ok' : 'failed',
+    status: capture.ok ? 'ok' : base.status,
     executable,
     target,
     dump: {

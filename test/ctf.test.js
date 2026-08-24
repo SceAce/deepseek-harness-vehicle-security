@@ -11,7 +11,9 @@ import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
 import * as ctfPlugin from '../lib/ctf/index.js'
 import * as ctfSkillPlugin from '../lib/ctf/skills.js'
-import { DEFAULT_CTF_PYTHON, discoverCtfPython, findCtfExecutable, findCtfIdaExecutable } from '../lib/ctf/environment.js'
+import { auditCtfTools } from '../lib/ctf/capabilities.js'
+import { DEFAULT_CTF_PYTHON, ctfCommandOptions, discoverCtfPython, findCtfExecutable, findCtfIdaExecutable } from '../lib/ctf/environment.js'
+import { runCommand } from '../lib/process.js'
 
 const config = {
   workspaceRoot: '.',
@@ -153,6 +155,66 @@ test('discovers Ruby user-gem executables outside the inherited PATH', async t =
   } finally {
     if (previous === undefined) delete process.env.GEM_HOME
     else process.env.GEM_HOME = previous
+  }
+})
+
+test('restores the Ruby gem environment for a wrapper under the user gem tree', async t => {
+  const home = await mkdtemp(path.join(os.tmpdir(), 'dsh-ctf-ruby-home-'))
+  const gemHome = path.join(home, '.local', 'share', 'gem', 'ruby', '3.4.0')
+  const wrongGemHome = await mkdtemp(path.join(os.tmpdir(), 'dsh-ctf-ruby-wrong-'))
+  const bin = path.join(gemHome, 'bin')
+  await mkdir(bin, { recursive: true })
+  const executable = path.join(bin, 'ctf-ruby-wrapper')
+  await writeFile(executable, [
+    '#!/bin/sh',
+    `if [ "$GEM_HOME" != "${gemHome}" ]; then`,
+    '  printf "%s\\n" "Gem::GemNotFoundException: wrong GEM_HOME" >&2',
+    '  exit 1',
+    'fi',
+    'printf "%s\\n" "fixture-gem 1.0.0"',
+    '',
+  ].join('\n'))
+  await chmod(executable, 0o755)
+  t.after(async () => {
+    await import('node:fs/promises').then(fs => fs.rm(home, { recursive: true, force: true }))
+    await import('node:fs/promises').then(fs => fs.rm(wrongGemHome, { recursive: true, force: true }))
+  })
+
+  const previous = {
+    home: process.env.HOME,
+    gemHome: process.env.GEM_HOME,
+    gemPath: process.env.GEM_PATH,
+    rubyVersion: process.env.RUBY_VERSION,
+  }
+  process.env.HOME = home
+  process.env.GEM_HOME = wrongGemHome
+  process.env.GEM_PATH = wrongGemHome
+  process.env.RUBY_VERSION = '3.4.0'
+  try {
+    assert.equal(await findCtfExecutable('ctf-ruby-wrapper'), executable)
+    const broken = await runCommand(executable, ['--version'], {
+      env: { GEM_HOME: wrongGemHome, GEM_PATH: wrongGemHome },
+    })
+    assert.equal(broken.ok, false)
+
+    const fixed = await runCommand(
+      executable,
+      ['--version'],
+      ctfCommandOptions(executable, {
+        env: { GEM_HOME: wrongGemHome, GEM_PATH: wrongGemHome },
+      }),
+    )
+    assert.equal(fixed.ok, true)
+    assert.match(fixed.stdout, /fixture-gem 1\.0\.0/)
+  } finally {
+    if (previous.home === undefined) delete process.env.HOME
+    else process.env.HOME = previous.home
+    if (previous.gemHome === undefined) delete process.env.GEM_HOME
+    else process.env.GEM_HOME = previous.gemHome
+    if (previous.gemPath === undefined) delete process.env.GEM_PATH
+    else process.env.GEM_PATH = previous.gemPath
+    if (previous.rubyVersion === undefined) delete process.env.RUBY_VERSION
+    else process.env.RUBY_VERSION = previous.rubyVersion
   }
 })
 
@@ -496,6 +558,68 @@ test('ctf_one_gadget resolves a sibling libc and returns parsed constraints', as
   } finally {
     if (previous === undefined) delete process.env.GEM_HOME
     else process.env.GEM_HOME = previous
+  }
+})
+
+test('marks broken Ruby wrappers unavailable and classifies backend failures', async t => {
+  const workspace = await mkdtemp(path.join(os.tmpdir(), 'dsh-ctf-ruby-backend-'))
+  const gemHome = await mkdtemp(path.join(os.tmpdir(), 'dsh-ctf-ruby-backend-gem-'))
+  const bin = path.join(gemHome, 'bin')
+  await mkdir(bin)
+  await writeFile(path.join(workspace, 'pwn'), 'challenge\n')
+  await writeFile(path.join(workspace, 'libc-2.31.so'), 'libc fixture\n')
+  const failure = [
+    '#!/bin/sh',
+    'printf "%s\\n" "Gem::GemNotFoundException: missing gem backend" >&2',
+    'exit 1',
+    '',
+  ].join('\n')
+  for (const name of ['one_gadget', 'seccomp-tools']) {
+    const executable = path.join(bin, name)
+    await writeFile(executable, failure)
+    await chmod(executable, 0o755)
+  }
+  t.after(async () => {
+    await import('node:fs/promises').then(fs => fs.rm(workspace, { recursive: true, force: true }))
+    await import('node:fs/promises').then(fs => fs.rm(gemHome, { recursive: true, force: true }))
+  })
+
+  const previous = { gemHome: process.env.GEM_HOME, gemPath: process.env.GEM_PATH }
+  process.env.GEM_HOME = gemHome
+  process.env.GEM_PATH = gemHome
+  try {
+    const audit = await auditCtfTools({ cwd: workspace, timeoutMs: 5000 })
+    const oneGadgetCapability = audit.capabilities.find(item => item.id === 'pwn.one_gadget')
+    const seccompCapability = audit.capabilities.find(item => item.id === 'pwn.seccomp_tools')
+    assert.equal(oneGadgetCapability.available, false)
+    assert.equal(oneGadgetCapability.path, null)
+    assert.equal(seccompCapability.available, false)
+    assert.equal(seccompCapability.path, null)
+    assert.ok(audit.commands.some(command => command.executable.endsWith('/one_gadget') && /Gem::GemNotFoundException/.test(command.stderr)))
+
+    const registered = []
+    ctfPlugin.apply({ tools: { register: tool => registered.push(tool) } }, {
+      ...config,
+      workspaceRoot: undefined,
+      commandTimeoutMs: 5000,
+    })
+    const execution = {
+      signal: new AbortController().signal,
+      agent: { session: { header: { cwd: workspace } } },
+    }
+    const oneGadget = await registered.find(item => item.name === 'ctf_one_gadget').execute({ path: 'pwn' }, execution)
+    const seccomp = await registered.find(item => item.name === 'ctf_seccomp_profile').execute({ path: 'pwn' }, execution)
+    assert.equal(oneGadget.status, 'missing_capability')
+    assert.match(oneGadget.limitations.join('\n'), /Ruby gem backend is missing/)
+    assert.ok(oneGadget.nextActions.some(action => action.tool === 'ctf_tool_setup'))
+    assert.equal(seccomp.status, 'missing_capability')
+    assert.match(seccomp.limitations.join('\n'), /Ruby gem backend is missing/)
+    assert.ok(seccomp.nextActions.some(action => action.tool === 'ctf_tool_setup'))
+  } finally {
+    if (previous.gemHome === undefined) delete process.env.GEM_HOME
+    else process.env.GEM_HOME = previous.gemHome
+    if (previous.gemPath === undefined) delete process.env.GEM_PATH
+    else process.env.GEM_PATH = previous.gemPath
   }
 })
 

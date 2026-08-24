@@ -1,9 +1,10 @@
 import { execFile } from 'node:child_process';
 export function runCommand(command, args, options = {}) {
-    const { signal, timeoutMs = 20_000, maxOutputChars = 40_000, cwd, } = options;
+    const { signal, timeoutMs = 20_000, maxOutputChars = 40_000, cwd, env, } = options;
     return new Promise((resolve, reject) => {
         execFile(command, [...args], {
             cwd,
+            env: env ? { ...process.env, ...env } : undefined,
             signal,
             timeout: timeoutMs,
             encoding: 'utf8',

@@ -1,5 +1,5 @@
 import path from 'node:path'
-import { discoverCtfPython, findCtfExecutable, findCtfIdaExecutable } from './environment.js'
+import { ctfCommandOptions, discoverCtfPython, findCtfExecutable, findCtfIdaExecutable } from './environment.js'
 import { runCommand, type CommandOptions } from '../process.js'
 import { discoverCtfMcpConfiguration } from './mcp.js'
 import { commandRecord, type CtfToolBinding, type ToolInvocationRecord } from './types.js'
@@ -140,18 +140,20 @@ export async function auditCtfTools(options: CommandOptions = {}): Promise<CtfTo
     }
 
     let version: string | null = null
+    let available = true
     if (probe.args.length > 0) {
-      const result = await runCommand(resolved, probe.args, options)
+      const result = await runCommand(resolved, probe.args, ctfCommandOptions(resolved, options))
       commands.push(commandRecord(resolved, probe.args, result, options.cwd))
-      version = firstLine(result.stdout, result.stderr)
+      available = result.ok
+      version = result.ok ? firstLine(result.stdout, result.stderr) : null
     }
 
     capabilities.push({
       id: probe.id,
       category: probe.category,
       executable: probe.executable,
-      available: true,
-      path: resolved,
+      available,
+      path: available ? resolved : null,
       version,
       operations: probe.operations,
       features: probe.features ?? [],

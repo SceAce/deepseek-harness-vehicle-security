@@ -5,6 +5,7 @@ export interface CommandOptions {
   timeoutMs?: number
   maxOutputChars?: number
   cwd?: string
+  env?: NodeJS.ProcessEnv
 }
 
 export interface CommandResult {
@@ -25,11 +26,13 @@ export function runCommand(
     timeoutMs = 20_000,
     maxOutputChars = 40_000,
     cwd,
+    env,
   } = options
 
   return new Promise((resolve, reject) => {
     execFile(command, [...args], {
       cwd,
+      env: env ? { ...process.env, ...env } : undefined,
       signal,
       timeout: timeoutMs,
       encoding: 'utf8',

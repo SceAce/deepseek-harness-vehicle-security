@@ -1,7 +1,7 @@
 import { readdir, stat } from 'node:fs/promises'
 import path from 'node:path'
 import { resolveWorkspaceFile, type ResolvedWorkspaceFile } from '../paths.js'
-import { findCtfExecutable } from './environment.js'
+import { ctfCommandOptions, findCtfExecutable, isRubyGemBackendFailure } from './environment.js'
 import { runCommand, type CommandOptions } from '../process.js'
 import { commandRecord, emptyResult, type CtfToolResultBase } from './types.js'
 
@@ -89,7 +89,7 @@ export async function searchOneGadgets(
     resolved.path,
   ]
   const capture = await runCommand(executable, argv, {
-    ...options,
+    ...ctfCommandOptions(executable, options),
     cwd: file.root,
     maxOutputChars: Math.max(options.maxOutputChars ?? 60_000, 120_000),
   })
@@ -100,8 +100,17 @@ export async function searchOneGadgets(
   if (capture.ok) {
     base.observations.push(`one_gadget returned ${gadgets.length} candidate gadgets.`)
   } else {
-    base.status = 'failed'
-    base.limitations.push(`one_gadget exited with ${capture.exitCode ?? 'no status'}: ${capture.error ?? capture.stderr.trim()}`)
+    base.status = isRubyGemBackendFailure(capture) ? 'missing_capability' : 'failed'
+    if (base.status === 'missing_capability') {
+      base.limitations.push('The one_gadget wrapper was found, but its Ruby gem backend is missing from the active RubyGems environment.')
+      base.nextActions.push({
+        tool: 'ctf_tool_setup',
+        args: { target: 'one_gadget' },
+        reason: 'Restore the one_gadget Ruby gem and verify the wrapper with the same GEM_HOME/GEM_PATH.',
+      })
+    } else {
+      base.limitations.push(`one_gadget exited with ${capture.exitCode ?? 'no status'}: ${capture.error ?? capture.stderr.trim()}`)
+    }
   }
   base.nextActions.push({
     tool: 'ctf_pwn_gdb_probe',
@@ -110,7 +119,7 @@ export async function searchOneGadgets(
   })
   return {
     ...base,
-    status: capture.ok ? 'ok' : 'failed',
+    status: capture.ok ? 'ok' : base.status,
     executable,
     anchor: file.relativePath,
     target: resolved,
