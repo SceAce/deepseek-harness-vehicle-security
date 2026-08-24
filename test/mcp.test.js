@@ -133,7 +133,7 @@ test('Codex CTF MCP initializes, lists tools, and probes crypto text', async t =
     const id = nextId++
     const timeout = setTimeout(() => {
       pending.delete(id)
-      reject(new Error(`MCP timeout for ${method}: ${stderr}`))
+      reject(new Error(`MCP timeout for ${method} ${params.name ?? ''}: ${stderr}`))
     }, timeoutMs)
     pending.set(id, {
       resolve: message => {
@@ -161,6 +161,11 @@ test('Codex CTF MCP initializes, lists tools, and probes crypto text', async t =
     'ctf_re_profile',
     'ctf_re_r2_query',
     'ctf_re_ida_script',
+    'ctf_re_pe_profile',
+    'ctf_re_android_profile',
+    'ctf_re_arch_profile',
+    'ctf_re_android_jadx',
+    'ctf_re_qemu_probe',
     'ctf_pwn_profile',
     'ctf_pwninit',
     'ctf_pwn_debug_probe',
@@ -244,6 +249,33 @@ test('Codex CTF MCP initializes, lists tools, and probes crypto text', async t =
   assert.equal(r2.result.structuredContent.status, 'ok')
   assert.equal(r2.result.structuredContent.query.commands[0], 'ij')
 
+  for (const [name, expectedPlatform] of [
+    ['ctf_re_pe_profile', 'windows'],
+    ['ctf_re_android_profile', 'android'],
+    ['ctf_re_arch_profile', 'multiarch'],
+  ]) {
+    const platform = await request('tools/call', {
+      name,
+      arguments: { workspaceRoot: root, path: 'fixtures/sample.asc' },
+    })
+    assert.equal(platform.result.isError, false)
+    assert.equal(platform.result.structuredContent.platform, expectedPlatform)
+  }
+
+  const jadx = await request('tools/call', {
+    name: 'ctf_re_android_jadx',
+    arguments: { workspaceRoot: root, path: 'fixtures/sample.asc' },
+  })
+  assert.equal(jadx.result.isError, false)
+  assert.equal(jadx.result.structuredContent.platform, 'android')
+
+  const qemu = await request('tools/call', {
+    name: 'ctf_re_qemu_probe',
+    arguments: { workspaceRoot: root, path: 'fixtures/sample.asc', architecture: 'arm' },
+  })
+  assert.equal(qemu.result.isError, false)
+  assert.equal(qemu.result.structuredContent.platform, 'multiarch')
+
   const oneGadget = await request('tools/call', {
     name: 'ctf_one_gadget',
     arguments: { workspaceRoot: root, path: 'fixtures/sample.asc' },
@@ -307,6 +339,15 @@ test('Codex CTF MCP initializes, lists tools, and probes crypto text', async t =
   })
   assert.equal(sageSetup.result.structuredContent.target, 'sage')
   assert.ok(sageSetup.result.structuredContent.request.operationOrder.every(operation => operation.command || operation.instruction))
+
+  for (const target of ['windows_re', 'android_re', 'arm_re']) {
+    const platformSetup = await request('tools/call', {
+      name: 'ctf_tool_setup',
+      arguments: { target },
+    })
+    assert.equal(platformSetup.result.structuredContent.target, target)
+    assert.ok(platformSetup.result.structuredContent.request.operationOrder.every(operation => operation.command || operation.instruction))
+  }
 
   const humanRequest = await request('tools/call', {
     name: 'ctf_human_request',

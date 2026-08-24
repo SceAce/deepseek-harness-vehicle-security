@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { resolveWorkspaceFile, type ResolvedWorkspaceFile } from '../paths.js'
@@ -66,8 +66,10 @@ export async function runCtfCryptoEngine(
     }
   }
 
-  const temporary = script ? null : await materializeInlineScript(engine, code)
-  const executionScriptPath = script?.path ?? temporary?.path
+  const temporary = script
+    ? engine === 'gp' ? await materializeWorkspaceScript(engine, script.path) : null
+    : await materializeInlineScript(engine, code)
+  const executionScriptPath = temporary?.path ?? script?.path
   if (!executionScriptPath) throw new Error('Crypto execution script was not created.')
   const commandArgv = script
     ? [quietFlag(engine), script.path, ...argv]
@@ -111,8 +113,16 @@ async function materializeInlineScript(
   const root = await mkdtemp(path.join(os.tmpdir(), `dsh-ctf-${engine}-`))
   const extension = engine === 'sage' ? '.sage' : '.gp'
   const scriptPath = path.join(root, `inline${extension}`)
-  await writeFile(scriptPath, `${code}\n`, 'utf8')
+  await writeFile(scriptPath, `${code.trimEnd()}\n${engine === 'gp' ? 'quit()\n' : ''}`, 'utf8')
   return { root, path: scriptPath }
+}
+
+async function materializeWorkspaceScript(
+  engine: CtfCryptoEngine,
+  sourcePath: string,
+): Promise<{ root: string; path: string }> {
+  const source = await readFile(sourcePath, 'utf8')
+  return materializeInlineScript(engine, source)
 }
 
 async function resolveScript(

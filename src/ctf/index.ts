@@ -11,6 +11,7 @@ import { createHumanRequest, operationsFromLegacySteps } from './human.js'
 import { configureCtfMcp } from './mcp.js'
 import { profilePcapArtifact, triageMiscArtifact } from './misc.js'
 import { runCtfPython } from './python.js'
+import { decompileAndroidArtifact, executeMultiarchArtifact, profileAndroidArtifact, profileMultiarchArtifact, profilePeArtifact } from './replatforms.js'
 import { routeCtfStart } from './router.js'
 import { searchOneGadgets } from './one-gadget.js'
 import { buildIdaScriptPlan, queryRadare2 } from './retools.js'
@@ -348,6 +349,86 @@ export function apply(ctx: Context, config: Config): void {
   }))
 
   ctx.tools.register(defineTool({
+    name: 'ctf_re_pe_profile',
+    description: 'Profile a Windows PE artifact with llvm-readobj and llvm-objdump, then route to IDA MCP, radare2, or runtime tooling based on imports, exports, and loader metadata.',
+    parameters: {
+      path: { type: 'string', required: true, description: 'PE/Windows artifact path relative to the active workspace' },
+    },
+    output: jsonOutput,
+    timeoutMs: config.commandTimeoutMs * 2,
+    isConcurrencySafe: () => true,
+    async execute(args, exec) {
+      const file = await workspaceFile(config, exec, args.path)
+      return profilePeArtifact(file, { ...commandOptions, signal: exec.signal }) as unknown as Promise<JsonValue>
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'ctf_re_android_profile',
+    description: 'Profile an APK with aapt2 and detect jadx, adb, and Frida backends. Use this before decompilation or human-operated emulator/device actions.',
+    parameters: {
+      path: { type: 'string', required: true, description: 'APK path relative to the active workspace' },
+    },
+    output: jsonOutput,
+    timeoutMs: config.commandTimeoutMs * 2,
+    isConcurrencySafe: () => true,
+    async execute(args, exec) {
+      const file = await workspaceFile(config, exec, args.path)
+      return profileAndroidArtifact(file, { ...commandOptions, signal: exec.signal }) as unknown as Promise<JsonValue>
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'ctf_re_arch_profile',
+    description: 'Profile a non-x86 ELF or other multi-architecture artifact and report readelf/LLVM architecture facts plus qemu-arm and qemu-aarch64 availability.',
+    parameters: {
+      path: { type: 'string', required: true, description: 'ARM, AArch64, MIPS, RISC-V, or other architecture artifact path relative to the active workspace' },
+    },
+    output: jsonOutput,
+    timeoutMs: config.commandTimeoutMs * 2,
+    isConcurrencySafe: () => true,
+    async execute(args, exec) {
+      const file = await workspaceFile(config, exec, args.path)
+      return profileMultiarchArtifact(file, { ...commandOptions, signal: exec.signal }) as unknown as Promise<JsonValue>
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'ctf_re_android_jadx',
+    description: 'Decompile an APK or DEX artifact with JADX into a workspace analysis directory and return the generated file list.',
+    parameters: {
+      path: { type: 'string', required: true, description: 'APK or DEX path relative to the active workspace' },
+    },
+    output: jsonOutput,
+    timeoutMs: config.commandTimeoutMs * 4,
+    isConcurrencySafe: () => false,
+    async execute(args, exec) {
+      const file = await workspaceFile(config, exec, args.path)
+      return decompileAndroidArtifact(file, { ...commandOptions, signal: exec.signal }) as unknown as Promise<JsonValue>
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'ctf_re_qemu_probe',
+    description: 'Execute an ARM or AArch64 local artifact through QEMU user mode with bounded argv and return raw runtime output.',
+    parameters: {
+      path: { type: 'string', required: true, description: 'ARM/AArch64 artifact path relative to the active workspace' },
+      architecture: { type: 'string', enum: ['arm', 'aarch64'], description: 'QEMU user-mode architecture; defaults to aarch64' },
+      argv: { type: 'array', items: { type: 'string' }, description: 'Optional target arguments' },
+    },
+    output: jsonOutput,
+    timeoutMs: config.commandTimeoutMs * 3,
+    isConcurrencySafe: () => false,
+    async execute(args, exec) {
+      const file = await workspaceFile(config, exec, args.path)
+      return executeMultiarchArtifact(file, {
+        architecture: args.architecture,
+        argv: args.argv,
+      }, { ...commandOptions, signal: exec.signal }) as unknown as Promise<JsonValue>
+    },
+  }))
+
+  ctx.tools.register(defineTool({
     name: 'ctf_rop_search',
     description: 'Search gadgets in a local binary using ROPgadget or ropper. Use when NX is enabled, a ROP chain is plausible, or available control-flow gadgets need confirmation.',
     parameters: {
@@ -607,12 +688,12 @@ export function apply(ctx: Context, config: Config): void {
 
   ctx.tools.register(defineTool({
     name: 'ctf_tool_setup',
-    description: 'Create an ordered human setup request for GDB/Pwndbg, IDA Pro, radare2, Sage, PARI/GP, mcp-chrome, mitmproxy, Python CTF packages, or BlackArch packages. The human returns only logs, screenshots, or OCR text.',
+    description: 'Create an ordered human setup request for GDB/Pwndbg, IDA Pro, radare2, Sage, PARI/GP, Windows PE, Android, ARM/multi-architecture, mcp-chrome, mitmproxy, Python CTF packages, or BlackArch packages. The human returns only logs, screenshots, or OCR text.',
     parameters: {
       target: {
         type: 'string',
         required: true,
-        enum: ['gdb_pwndbg', 'ida_pro', 'r2', 'one_gadget', 'seccomp_tools', 'sage', 'pari_gp', 'chrome_mcp', 'chrome_devtools_mcp', 'mitmproxy', 'python_ctf_env', 'blackarch_repo'],
+        enum: ['gdb_pwndbg', 'ida_pro', 'r2', 'one_gadget', 'seccomp_tools', 'sage', 'pari_gp', 'windows_re', 'android_re', 'arm_re', 'chrome_mcp', 'chrome_devtools_mcp', 'mitmproxy', 'python_ctf_env', 'blackarch_repo'],
         description: 'Tool or package setup target',
       },
       context: { type: 'string', description: 'Optional local setup context' },
@@ -713,13 +794,16 @@ function parseSetupTarget(value: string): CtfSetupTarget {
     || value === 'seccomp_tools'
     || value === 'sage'
     || value === 'pari_gp'
+    || value === 'windows_re'
+    || value === 'android_re'
+    || value === 'arm_re'
     || value === 'chrome_mcp'
     || value === 'chrome_devtools_mcp'
     || value === 'mitmproxy'
     || value === 'python_ctf_env'
     || value === 'blackarch_repo'
   ) return value
-  throw new Error('target must be gdb_pwndbg, ida_pro, r2, one_gadget, seccomp_tools, sage, pari_gp, chrome_mcp, chrome_devtools_mcp, mitmproxy, python_ctf_env, or blackarch_repo')
+  throw new Error('target must be gdb_pwndbg, ida_pro, r2, one_gadget, seccomp_tools, sage, pari_gp, windows_re, android_re, arm_re, chrome_mcp, chrome_devtools_mcp, mitmproxy, python_ctf_env, or blackarch_repo')
 }
 
 function parseHumanRequestType(value: string) {

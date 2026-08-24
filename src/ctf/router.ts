@@ -89,6 +89,11 @@ export function toolGraphForCategory(category: ResolvedCtfCategory): CtfToolGrap
           { tool: 'mcp.r2', role: 'dispatch interactive or long-running radare2 MCP operations', when: 'r2 MCP is configured and the query needs stateful analysis' },
           { tool: 'ctf_re_ida_script', role: 'generate or run a focused IDAPython script', when: 'IDA-specific analysis or decompiler-side scripting is needed' },
           { tool: 'mcp.ida_pro', role: 'use the configured IDA MCP for database, decompiler, functions, and xrefs', when: 'IDA MCP is configured' },
+          { tool: 'ctf_re_pe_profile', role: 'profile Windows PE headers, imports, exports, and loader metadata', when: 'the artifact is PE/COFF or Windows-specific metadata matters' },
+          { tool: 'ctf_re_android_profile', role: 'profile APK metadata and detect JADX, ADB, and Frida backends', when: 'the artifact is an APK or Android runtime evidence matters' },
+          { tool: 'ctf_re_android_jadx', role: 'decompile APK/DEX through JADX', when: 'Android static source output is needed after capability detection' },
+          { tool: 'ctf_re_arch_profile', role: 'profile ARM/AArch64 and other non-x86 architecture evidence', when: 'the artifact is multi-architecture or non-native' },
+          { tool: 'ctf_re_qemu_probe', role: 'execute ARM/AArch64 through QEMU user mode', when: 'architecture-specific runtime behavior must be observed' },
           { tool: 'ctf_pwn_gdb_probe', role: 'observe runtime state through Pwndbg', when: 'a local debugger is available and runtime state matters' },
           { tool: 'ctf_pwn_debug_probe', role: 'observe runtime branches, registers, and memory', when: 'static evidence needs runtime confirmation' },
           { tool: 'ctf_rop_search', role: 'search gadgets', when: 'gadget-based control flow is plausible' },
@@ -106,6 +111,11 @@ export function toolGraphForCategory(category: ResolvedCtfCategory): CtfToolGrap
           { from: 'ctf_re_profile', to: 'mcp.r2', condition: 'r2 MCP is configured and stateful analysis is more useful than a one-shot query' },
           { from: 'ctf_re_profile', to: 'ctf_re_ida_script', condition: 'IDA script or decompiler evidence is required' },
           { from: 'ctf_re_profile', to: 'mcp.ida_pro', condition: 'IDA MCP is configured and database/decompiler operations are required' },
+          { from: 'ctf_re_profile', to: 'ctf_re_pe_profile', condition: 'artifact is PE/COFF or Windows loader/import/export evidence is needed' },
+          { from: 'ctf_re_profile', to: 'ctf_re_android_profile', condition: 'artifact is APK/DEX or Android manifest/runtime evidence is needed' },
+          { from: 'ctf_re_android_profile', to: 'ctf_re_android_jadx', condition: 'JADX is available and Java/XML source output is needed' },
+          { from: 'ctf_re_profile', to: 'ctf_re_arch_profile', condition: 'artifact is ARM/AArch64 or another non-x86 architecture' },
+          { from: 'ctf_re_arch_profile', to: 'ctf_re_qemu_probe', condition: 'QEMU backend is available and runtime behavior needs validation' },
           { from: 'ctf_re_profile', to: 'ctf_pwn_gdb_probe', condition: 'Pwndbg runtime context is available and a static hypothesis needs validation' },
           { from: 'ctf_re_profile', to: 'ctf_pwn_debug_probe', condition: 'runtime behavior must confirm a static hypothesis' },
           { from: 'ctf_re_profile', to: 'ctf_rop_search', condition: 'gadget search is relevant' },
@@ -239,8 +249,11 @@ function inferCategory(
   if (artifact) {
     const extension = artifact.extension
     const fileType = artifact.fileType ?? ''
-    if (/\bELF\b|PE32|Mach-O|executable|shared object/i.test(fileType)) return 'pwn'
-    if (['.elf', '.so', '.exe', '.dll', '.dylib'].includes(extension)) return 'pwn'
+    if (/\bELF\b|Mach-O|shared object/i.test(fileType)) return 'pwn'
+    if (/PE32|MS-DOS executable/i.test(fileType)) return 're'
+    if (['.elf', '.so', '.dylib'].includes(extension)) return 'pwn'
+    if (['.exe', '.dll', '.sys', '.ocx'].includes(extension)) return 're'
+    if (['.apk', '.aab', '.dex'].includes(extension)) return 're'
     if (['.pcap', '.pcapng', '.png', '.jpg', '.jpeg', '.gif', '.bmp', '.wav', '.mp3', '.zip', '.rar', '.7z', '.tar', '.gz'].includes(extension)) return 'misc'
     if (['.py', '.js', '.java', '.c', '.cpp', '.go', '.rs', '.txt'].includes(extension) && /encrypt|decrypt|rsa|xor|flag|cipher/i.test(artifact.textSample ?? '')) return 'crypto'
   }
@@ -325,19 +338,31 @@ function choicesForCategory(
     ]
   }
   if (category === 're' && pathArgs) {
-    return [
+    const fileType = artifact?.fileType ?? ''
+    const extension = artifact?.extension ?? ''
+    const choices = [
       choice(audit, 'ctf_re_profile', pathArgs, 'Get a compact static overview before choosing a deeper RE path.'),
       choice(audit, 'ctf_re_r2_query', { ...pathArgs, commands: ['aaa', 'ij', 'afl'] }, 'Use for fast headless disassembly, metadata, and xrefs.'),
       choice(audit, 'ctf_re_ida_script', { ...pathArgs, focus: '', execute: false }, 'Use when IDA database/decompiler state or IDAPython is useful.'),
       choice(audit, 'ctf_pwn_gdb_probe', { ...pathArgs, breakAt: 'main' }, 'Use only when runtime behavior must validate a static hypothesis.'),
     ]
+    if (/PE32|MS-DOS executable/i.test(fileType) || ['.exe', '.dll', '.sys', '.ocx'].includes(extension)) {
+      choices.splice(1, 0, choice(audit, 'ctf_re_pe_profile', pathArgs, 'Use LLVM PE/COFF headers, imports, exports, and loader metadata before deeper Windows analysis.'))
+    }
+    if (['.apk', '.aab', '.dex'].includes(extension) || /Android package|Dalvik|DEX/i.test(fileType)) {
+      choices.splice(1, 0, choice(audit, 'ctf_re_android_profile', pathArgs, 'Use aapt2/JADX first for Android package metadata and decompilation capability evidence.'))
+    }
+    if (/\bARM\b|AArch64|aarch64|arm64/i.test(fileType) || /arm|aarch64/i.test(extension)) {
+      choices.splice(1, 0, choice(audit, 'ctf_re_arch_profile', pathArgs, 'Use architecture-aware headers and QEMU backend evidence before disassembly or emulation.'))
+    }
+    return choices
   }
   if (category === 'crypto') {
     const cryptoArgs = pathArgs ?? {}
     return [
       choice(audit, 'ctf_crypto_probe', pathArgs ? cryptoArgs : { text: input.context ?? input.objective ?? '' }, 'Start with structured encoding, entropy, hash, and XOR evidence.'),
       choice(audit, 'ctf_sage_exec', { code: 'print(factor(2^64 - 1))' }, 'Use when finite fields, elliptic curves, symbolic algebra, or Sage-specific number theory is relevant.'),
-      choice(audit, 'ctf_gp_exec', { code: 'factor(2^64 - 1)' }, 'Use when fast factorization or PARI/GP arithmetic is the focused question.'),
+      choice(audit, 'ctf_gp_exec', { code: 'print(factor(2^64 - 1))' }, 'Use when fast factorization or PARI/GP arithmetic is the focused question.'),
       choice(audit, 'ctf_python_exec', { code: 'from sympy import factorint; print(factorint(2**64 - 1))' }, 'Use the fixed CTF Python environment when Z3, SymPy, gmpy2, or PyCryptodome is sufficient.'),
     ]
   }

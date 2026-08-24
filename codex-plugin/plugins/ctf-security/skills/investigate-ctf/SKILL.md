@@ -30,7 +30,7 @@ Use the tool layer before writing a solver. When the local capability state or a
 ## Tool Map
 
 - Intake: `ctf_start`, `ctf_tool_audit`, `ctf_artifact_profile`
-- RE/Pwn: `ctf_re_profile`, `ctf_pwn_profile`, `ctf_pwninit`, `ctf_pwn_debug_probe`, `ctf_pwn_gdb_probe`, `ctf_re_r2_query`, `ctf_re_ida_script`, `ctf_rop_search`, `ctf_one_gadget`, `ctf_seccomp_profile`, `ctf_python_exec`
+- RE/Pwn: `ctf_re_profile`, `ctf_re_pe_profile`, `ctf_re_android_profile`, `ctf_re_android_jadx`, `ctf_re_arch_profile`, `ctf_re_qemu_probe`, `ctf_pwn_profile`, `ctf_pwninit`, `ctf_pwn_debug_probe`, `ctf_pwn_gdb_probe`, `ctf_re_r2_query`, `ctf_re_ida_script`, `ctf_rop_search`, `ctf_one_gadget`, `ctf_seccomp_profile`, `ctf_python_exec`
 - Crypto: `ctf_crypto_probe`, `ctf_sage_exec`, `ctf_gp_exec`, `ctf_python_exec`
 - Misc: `ctf_misc_triage`, `ctf_pcap_profile`
 - Web: `ctf_http_request`, `ctf_http_diff`, `ctf_web_browser_probe`, `ctf_web_capture_probe`

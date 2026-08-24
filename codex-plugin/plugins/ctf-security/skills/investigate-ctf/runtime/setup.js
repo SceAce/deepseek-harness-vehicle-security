@@ -204,6 +204,97 @@ function buildSetupRequest(target, context) {
                 screenshot: 'terminal screenshot text showing GP installation or verification',
                 ocr_text: 'recognized text containing the GP path, version, or error',
             });
+        case 'windows_re':
+            return requestFromOperations('start_service', 'Install and verify Windows reverse-engineering backends', 'PE/COFF analysis needs LLVM tools; Wine and MinGW binutils are optional runtime and cross-format helpers.', [
+                {
+                    order: 1,
+                    kind: 'command',
+                    title: 'Install PE analysis tools',
+                    command: 'sudo pacman -S --needed llvm mingw-w64-binutils wine',
+                    expectedSignal: 'Return the package installation log or the exact package-manager error.',
+                },
+                {
+                    order: 2,
+                    kind: 'command',
+                    title: 'Verify PE metadata tools',
+                    command: 'command -v llvm-readobj llvm-objdump x86_64-w64-mingw32-objdump wine winedbg; llvm-readobj --version; llvm-objdump --version',
+                    expectedSignal: 'Return resolved paths and version banners.',
+                },
+                {
+                    order: 3,
+                    kind: 'instruction',
+                    title: 'Report Windows sample runtime state',
+                    instruction: 'Only when runtime behavior is needed, launch the Windows sample through the configured Wine prefix and return the terminal log or screenshot/OCR text. Do not paste binary secrets.',
+                    expectedSignal: 'Return log, screenshot, or OCR text showing the process start or visible error.',
+                },
+            ], context, {
+                log: 'LLVM, MinGW, Wine installation and version output',
+                screenshot: 'Wine or terminal screenshot text showing the sample state',
+                ocr_text: 'recognized text containing tool paths, versions, or runtime errors',
+            });
+        case 'android_re':
+            return requestFromOperations('start_service', 'Install and verify Android reverse-engineering backends', 'APK/DEX analysis needs aapt2, JADX, ADB, and optionally Frida for runtime instrumentation.', [
+                {
+                    order: 1,
+                    kind: 'command',
+                    title: 'Install Android static and device tools',
+                    command: 'sudo pacman -S --needed android-tools android-sdk-build-tools jadx',
+                    expectedSignal: 'Return the package installation log or the exact package-manager error.',
+                },
+                {
+                    order: 2,
+                    kind: 'command',
+                    title: 'Install Frida into the fixed CTF Python environment when runtime instrumentation is needed',
+                    command: '/home/source/tools/PyVenv/CTF/bin/python -m pip install frida frida-tools',
+                    expectedSignal: 'Return the pip installation log or the exact missing dependency/error.',
+                },
+                {
+                    order: 3,
+                    kind: 'command',
+                    title: 'Verify Android backends',
+                    command: 'command -v aapt2 jadx adb frida; aapt2 version; jadx --version; adb version; frida --version',
+                    expectedSignal: 'Return resolved paths and version banners.',
+                },
+                {
+                    order: 4,
+                    kind: 'instruction',
+                    title: 'Attach an emulator or test device only when runtime evidence is required',
+                    instruction: 'Start the selected emulator/device, enable the required debugging setting, and return the `adb devices` log or a screenshot/OCR text of the connection state.',
+                    expectedSignal: 'Return log, screenshot, or OCR text showing the device state.',
+                },
+            ], context, {
+                log: 'Android package installation, pip output, tool versions, and adb devices',
+                screenshot: 'emulator/device or terminal screenshot text',
+                ocr_text: 'recognized text containing tool paths, versions, or device state',
+            });
+        case 'arm_re':
+            return requestFromOperations('start_service', 'Install and verify ARM and multi-architecture reverse-engineering backends', 'ARM/AArch64 CTF analysis needs architecture-aware disassembly, QEMU user mode, and a debugger that can inspect the selected architecture.', [
+                {
+                    order: 1,
+                    kind: 'command',
+                    title: 'Install architecture and emulation tools',
+                    command: 'sudo pacman -S --needed qemu-user llvm binutils gdb',
+                    expectedSignal: 'Return the package installation log or the exact package-manager error.',
+                },
+                {
+                    order: 2,
+                    kind: 'command',
+                    title: 'Verify ARM/AArch64 backends',
+                    command: 'command -v qemu-arm qemu-aarch64 llvm-objdump llvm-readobj readelf gdb; qemu-arm --version; qemu-aarch64 --version; gdb --version',
+                    expectedSignal: 'Return resolved paths and version banners.',
+                },
+                {
+                    order: 3,
+                    kind: 'command',
+                    title: 'Check optional multiarch GDB name',
+                    command: 'command -v gdb-multiarch || true',
+                    expectedSignal: 'Return the path when available, or an empty result when the regular GDB build is used.',
+                },
+            ], context, {
+                log: 'QEMU, LLVM, binutils, GDB installation and version output',
+                screenshot: 'terminal screenshot text showing architecture tool setup',
+                ocr_text: 'recognized text containing paths, versions, or package errors',
+            });
         case 'chrome_mcp':
         case 'chrome_devtools_mcp':
             return requestFromOperations('start_service', 'Verify mcp-chrome browser bridge', 'The browser automation path uses the installed mcp-chrome bridge; the AI writes the MCP JSON and the human only confirms the bridge/extension state.', [

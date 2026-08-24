@@ -78,6 +78,18 @@ const PROBES: CapabilityProbe[] = [
   { id: 're.nm', category: 're', executable: 'nm', args: ['--version'], operations: ['symbol listing'] },
   { id: 're.r2', category: 're', executable: 'r2', args: ['-v'], operations: ['headless reverse-engineering queries'] },
   { id: 're.ghidra', category: 're', executable: 'analyzeHeadless', args: [], operations: ['Ghidra headless analysis'] },
+  { id: 're.llvm_objdump', category: 're', executable: 'llvm-objdump', args: ['--version'], operations: ['PE/COFF and multi-architecture disassembly'] },
+  { id: 're.llvm_readobj', category: 're', executable: 'llvm-readobj', args: ['--version'], operations: ['PE/COFF headers, imports, exports, and architecture metadata'] },
+  { id: 're.gdb_multiarch', category: 're', executable: 'gdb-multiarch', args: ['--version'], operations: ['multi-architecture debugging'] },
+  { id: 're.qemu_arm', category: 're', executable: 'qemu-arm', args: ['--version'], operations: ['ARM user-mode emulation'] },
+  { id: 're.qemu_aarch64', category: 're', executable: 'qemu-aarch64', args: ['--version'], operations: ['AArch64 user-mode emulation'] },
+  { id: 're.wine', category: 're', executable: 'wine', args: ['--version'], operations: ['Windows PE runtime observation'] },
+  { id: 're.winedbg', category: 're', executable: 'winedbg', args: ['--version'], operations: ['Windows runtime debugger'] },
+  { id: 're.mingw_objdump', category: 're', executable: 'x86_64-w64-mingw32-objdump', args: ['--version'], operations: ['MinGW PE/COFF inspection'] },
+  { id: 're.android_aapt2', category: 're', executable: 'aapt2', args: ['version'], operations: ['APK manifest and resource metadata'] },
+  { id: 're.android_jadx', category: 're', executable: 'jadx', args: ['--version'], operations: ['DEX/APK decompilation'] },
+  { id: 're.android_adb', category: 're', executable: 'adb', args: ['version'], operations: ['Android device/emulator bridge'] },
+  { id: 're.android_frida', category: 're', executable: 'frida', args: ['--version'], operations: ['Android runtime instrumentation'] },
   { id: 're.patchelf', category: 're', executable: 'patchelf', args: ['--version'], operations: ['ELF interpreter, RPATH, and metadata inspection'] },
   { id: 're.strace', category: 're', executable: 'strace', args: ['-V'], operations: ['syscall tracing'] },
   { id: 're.ltrace', category: 're', executable: 'ltrace', args: ['-V'], operations: ['library call tracing'] },
@@ -114,6 +126,9 @@ const PYTHON_MODULES: PythonModuleProbe[] = [
   { module: 'unicorn', importName: 'unicorn', category: 're', operations: ['CPU emulation'] },
   { module: 'capstone', importName: 'capstone', category: 're', operations: ['multi-architecture disassembly'] },
   { module: 'lief', importName: 'lief', category: 're', operations: ['binary format parsing and patch planning'] },
+  { module: 'androguard', importName: 'androguard', category: 're', operations: ['Android APK/DEX static analysis'] },
+  { module: 'frida', importName: 'frida', category: 're', operations: ['runtime instrumentation client'] },
+  { module: 'pyelftools', importName: 'elftools', category: 're', operations: ['ELF parsing and architecture metadata'] },
   { module: 'beautifulsoup4', importName: 'bs4', category: 'web', operations: ['HTML parsing'] },
   { module: 'playwright', importName: 'playwright', category: 'web', operations: ['browser automation fallback'] },
 ]
@@ -384,6 +399,12 @@ function recommendations(capabilities: CtfCapability[], modules: CtfCapability[]
   if (!available.has('core.file')) result.push('Install file for reliable artifact type detection.')
   if (!available.has('re.readelf')) result.push('Install binutils for ELF analysis.')
   if (!available.has('re.r2')) result.push('Install radare2 for fast headless RE queries and JSON output.')
+  if (!available.has('re.llvm_readobj') && !available.has('re.llvm_objdump')) result.push('Install LLVM tools for PE/COFF headers, imports, exports, and multi-architecture disassembly.')
+  if (!available.has('re.gdb_multiarch')) result.push('Install gdb-multiarch when ARM or other non-native runtime debugging is required.')
+  if (!available.has('re.qemu_arm') || !available.has('re.qemu_aarch64')) result.push('Install qemu-user for ARM/AArch64 user-mode emulation.')
+  if (!available.has('re.android_aapt2') && !available.has('re.android_jadx')) result.push('Install Android build-tools/aapt2 and jadx for APK/DEX analysis.')
+  if (!available.has('re.android_adb')) result.push('Install android-tools when an Android emulator or device is part of the challenge.')
+  if (!available.has('re.android_frida') && !available.has('python.frida')) result.push('Install Frida tools or the fixed Python frida module for Android runtime instrumentation.')
   if (!available.has('pwn.gdb')) result.push('Install gdb for pwn runtime probes.')
   if (!available.has('pwn.pwndbg')) result.push('Configure pwndbg inside gdb for context, vmmap, heap, and register views.')
   if (!available.has('pwn.checksec')) result.push('Install checksec for a concise mitigation summary.')
@@ -485,6 +506,54 @@ const TOOL_BINDINGS: ToolBindingSpec[] = [
     backendCapabilities: [],
     fallbackTool: 'ctf_re_r2_query',
     exampleArgs: { path: 'chall', focus: 'flag strcmp', execute: false },
+  },
+  {
+    tool: 'ctf_re_pe_profile',
+    category: 're',
+    purpose: 'Profile Windows PE headers, sections, imports, exports, and loader metadata with LLVM tools.',
+    when: 'The artifact is PE/COFF or Windows-specific metadata is the next evidence question.',
+    backendCapabilities: ['re.llvm_readobj', 're.llvm_objdump'],
+    anyBackend: true,
+    fallbackTool: 'ctf_re_profile',
+    exampleArgs: { path: 'chall.exe' },
+  },
+  {
+    tool: 'ctf_re_android_profile',
+    category: 're',
+    purpose: 'Profile APK metadata and discover JADX, ADB, and Frida runtime backends.',
+    when: 'The artifact is an APK or Android runtime evidence is required.',
+    backendCapabilities: ['re.android_aapt2', 're.android_jadx'],
+    anyBackend: true,
+    fallbackTool: 'ctf_tool_setup',
+    exampleArgs: { path: 'app.apk' },
+  },
+  {
+    tool: 'ctf_re_arch_profile',
+    category: 're',
+    purpose: 'Identify non-x86 architecture evidence and report LLVM/readelf plus QEMU user-mode backends.',
+    when: 'The artifact is ARM, AArch64, MIPS, RISC-V, or another non-native architecture.',
+    backendCapabilities: ['re.readelf', 're.llvm_readobj'],
+    anyBackend: true,
+    fallbackTool: 'ctf_tool_setup',
+    exampleArgs: { path: 'chall.arm' },
+  },
+  {
+    tool: 'ctf_re_android_jadx',
+    category: 're',
+    purpose: 'Decompile APK/DEX through JADX and return generated workspace files.',
+    when: 'Android static analysis needs Java/XML source output after package capability detection.',
+    backendCapabilities: ['re.android_jadx'],
+    fallbackTool: 'ctf_tool_setup',
+    exampleArgs: { path: 'app.apk' },
+  },
+  {
+    tool: 'ctf_re_qemu_probe',
+    category: 're',
+    purpose: 'Execute ARM/AArch64 artifacts through QEMU user mode with bounded arguments.',
+    when: 'Architecture-specific runtime behavior must be observed after static architecture identification.',
+    backendCapabilities: ['re.qemu_arm', 're.qemu_aarch64'],
+    fallbackTool: 'ctf_tool_setup',
+    exampleArgs: { path: 'chall.arm', architecture: 'arm' },
   },
   {
     tool: 'ctf_pwn_profile',

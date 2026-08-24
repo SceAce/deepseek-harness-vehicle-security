@@ -119,6 +119,61 @@ const tools = [
     },
   },
   {
+    name: 'ctf_re_pe_profile',
+    description: 'Profile a Windows PE artifact with llvm-readobj and llvm-objdump, then route to IDA MCP, radare2, or runtime tooling.',
+    inputSchema: {
+      type: 'object',
+      properties: { ...workspaceProperties, path: { type: 'string' } },
+      required: ['workspaceRoot', 'path'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'ctf_re_android_profile',
+    description: 'Profile an APK with aapt2 and detect jadx, adb, and Frida backends.',
+    inputSchema: {
+      type: 'object',
+      properties: { ...workspaceProperties, path: { type: 'string' } },
+      required: ['workspaceRoot', 'path'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'ctf_re_arch_profile',
+    description: 'Profile ARM/AArch64 and other multi-architecture artifacts with readelf, LLVM, and QEMU capability evidence.',
+    inputSchema: {
+      type: 'object',
+      properties: { ...workspaceProperties, path: { type: 'string' } },
+      required: ['workspaceRoot', 'path'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'ctf_re_android_jadx',
+    description: 'Decompile an APK or DEX artifact with JADX into a workspace analysis directory.',
+    inputSchema: {
+      type: 'object',
+      properties: { ...workspaceProperties, path: { type: 'string' } },
+      required: ['workspaceRoot', 'path'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'ctf_re_qemu_probe',
+    description: 'Execute an ARM or AArch64 local artifact through QEMU user mode with bounded arguments.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ...workspaceProperties,
+        path: { type: 'string' },
+        architecture: { type: 'string', enum: ['arm', 'aarch64'] },
+        argv: { type: 'array', items: { type: 'string' } },
+      },
+      required: ['workspaceRoot', 'path'],
+      additionalProperties: false,
+    },
+  },
+  {
     name: 'ctf_pwn_profile',
     description: 'Collect a compact Pwn overview after the mandatory ctf_pwninit first step. Choose radare2, Pwndbg/GDB, and gadget search based on the next evidence question.',
     inputSchema: {
@@ -360,7 +415,7 @@ const tools = [
     inputSchema: {
       type: 'object',
       properties: {
-        target: { type: 'string', enum: ['gdb_pwndbg', 'ida_pro', 'r2', 'one_gadget', 'seccomp_tools', 'sage', 'pari_gp', 'chrome_mcp', 'chrome_devtools_mcp', 'mitmproxy', 'python_ctf_env', 'blackarch_repo'] },
+        target: { type: 'string', enum: ['gdb_pwndbg', 'ida_pro', 'r2', 'one_gadget', 'seccomp_tools', 'sage', 'pari_gp', 'windows_re', 'android_re', 'arm_re', 'chrome_mcp', 'chrome_devtools_mcp', 'mitmproxy', 'python_ctf_env', 'blackarch_repo'] },
         context: { type: 'string' },
       },
       required: ['target'],
@@ -501,6 +556,29 @@ async function callTool(name, args) {
       const { buildIdaScriptPlan } = await runtime('retools')
       return buildIdaScriptPlan(await workspaceFile(args), typeof args.focus === 'string' ? args.focus : '', args.execute === true, commandOptions)
     }
+    case 'ctf_re_pe_profile': {
+      const { profilePeArtifact } = await runtime('replatforms')
+      return profilePeArtifact(await workspaceFile(args), commandOptions)
+    }
+    case 'ctf_re_android_profile': {
+      const { profileAndroidArtifact } = await runtime('replatforms')
+      return profileAndroidArtifact(await workspaceFile(args), commandOptions)
+    }
+    case 'ctf_re_arch_profile': {
+      const { profileMultiarchArtifact } = await runtime('replatforms')
+      return profileMultiarchArtifact(await workspaceFile(args), commandOptions)
+    }
+    case 'ctf_re_android_jadx': {
+      const { decompileAndroidArtifact } = await runtime('replatforms')
+      return decompileAndroidArtifact(await workspaceFile(args), commandOptions)
+    }
+    case 'ctf_re_qemu_probe': {
+      const { executeMultiarchArtifact } = await runtime('replatforms')
+      return executeMultiarchArtifact(await workspaceFile(args), {
+        architecture: args.architecture,
+        argv: args.argv,
+      }, commandOptions)
+    }
     case 'ctf_pwn_profile': {
       const { profilePwnArtifact } = await runtime('binary')
       return profilePwnArtifact(await workspaceFile(args), commandOptions)
@@ -639,7 +717,7 @@ async function callTool(name, args) {
     case 'ctf_tool_setup': {
       const { createToolSetupRequest } = await runtime('setup')
       const target = requireString(args.target, 'target')
-      if (!['gdb_pwndbg', 'ida_pro', 'r2', 'one_gadget', 'seccomp_tools', 'sage', 'pari_gp', 'chrome_mcp', 'chrome_devtools_mcp', 'mitmproxy', 'python_ctf_env', 'blackarch_repo'].includes(target)) {
+      if (!['gdb_pwndbg', 'ida_pro', 'r2', 'one_gadget', 'seccomp_tools', 'sage', 'pari_gp', 'windows_re', 'android_re', 'arm_re', 'chrome_mcp', 'chrome_devtools_mcp', 'mitmproxy', 'python_ctf_env', 'blackarch_repo'].includes(target)) {
         throw new Error(`unknown setup target: ${target}`)
       }
       return createToolSetupRequest(target, typeof args.context === 'string' ? args.context : undefined)

@@ -35,6 +35,11 @@ const CTF_TOOL_NAMES = [
   'ctf_pwn_gdb_probe',
   'ctf_re_r2_query',
   'ctf_re_ida_script',
+  'ctf_re_pe_profile',
+  'ctf_re_android_profile',
+  'ctf_re_arch_profile',
+  'ctf_re_android_jadx',
+  'ctf_re_qemu_probe',
   'ctf_rop_search',
   'ctf_one_gadget',
   'ctf_seccomp_profile',
@@ -462,6 +467,45 @@ test('ctf_re_r2_query executes local radare2 and ctf_re_ida_script remains usefu
   assert.ok(['ok', 'missing_capability'].includes(ida.status))
 })
 
+test('platform RE tools profile PE, Android, and multi-architecture artifacts', async t => {
+  const workspace = await mkdtemp(path.join(os.tmpdir(), 'dsh-ctf-platform-re-'))
+  t.after(() => import('node:fs/promises').then(fs => fs.rm(workspace, { recursive: true, force: true })))
+  await copyFile('/bin/true', path.join(workspace, 'sample.exe'))
+  await copyFile('/bin/true', path.join(workspace, 'sample.apk'))
+  await copyFile('/bin/true', path.join(workspace, 'sample.arm'))
+
+  const registered = []
+  ctfPlugin.apply({ tools: { register: tool => registered.push(tool) } }, {
+    ...config,
+    workspaceRoot: undefined,
+    commandTimeoutMs: 5000,
+  })
+  const execution = {
+    signal: new AbortController().signal,
+    agent: { session: { header: { cwd: workspace } } },
+  }
+
+  const pe = await registered.find(item => item.name === 'ctf_re_pe_profile').execute({ path: 'sample.exe' }, execution)
+  const android = await registered.find(item => item.name === 'ctf_re_android_profile').execute({ path: 'sample.apk' }, execution)
+  const arch = await registered.find(item => item.name === 'ctf_re_arch_profile').execute({ path: 'sample.arm' }, execution)
+  const jadx = await registered.find(item => item.name === 'ctf_re_android_jadx').execute({ path: 'sample.apk' }, execution)
+  const qemu = await registered.find(item => item.name === 'ctf_re_qemu_probe').execute({ path: 'sample.arm', architecture: 'arm' }, execution)
+
+  assert.equal(pe.platform, 'windows')
+  assert.ok(pe.tools.some(tool => tool.name === 'llvm-readobj'))
+  assert.ok(['ok', 'missing_capability'].includes(pe.status))
+  assert.equal(android.platform, 'android')
+  assert.ok(android.tools.some(tool => tool.name === 'jadx'))
+  assert.ok(['ok', 'missing_capability'].includes(android.status))
+  assert.equal(arch.platform, 'multiarch')
+  assert.ok(arch.tools.some(tool => tool.name === 'qemu-arm'))
+  assert.ok(['ok', 'missing_capability'].includes(arch.status))
+  assert.equal(jadx.platform, 'android')
+  assert.ok(['ok', 'missing_capability', 'failed'].includes(jadx.status))
+  assert.equal(qemu.platform, 'multiarch')
+  assert.ok(['ok', 'missing_capability', 'failed'].includes(qemu.status))
+})
+
 test('ctf_re_r2_query keeps undefined cwd out of the real DSH output', async t => {
   const workspace = await mkdtemp(path.join(os.tmpdir(), 'dsh-ctf-r2-runtime-'))
   t.after(() => import('node:fs/promises').then(fs => fs.rm(workspace, { recursive: true, force: true })))
@@ -820,18 +864,52 @@ test('ctf_sage_exec and ctf_gp_exec run local crypto backends when present', asy
   }
 })
 
+test('ctf_gp_exec closes the non-interactive GP session', async t => {
+  const gpExecutable = await findCtfExecutable('gp')
+  if (!gpExecutable) {
+    t.skip('GP is not installed in this test environment')
+    return
+  }
+  const workspace = await mkdtemp(path.join(os.tmpdir(), 'dsh-ctf-gp-real-'))
+  t.after(() => import('node:fs/promises').then(fs => fs.rm(workspace, { recursive: true, force: true })))
+  const registered = []
+  ctfPlugin.apply({ tools: { register: tool => registered.push(tool) } }, {
+    ...config,
+    workspaceRoot: workspace,
+    commandTimeoutMs: 3000,
+  })
+  const gp = registered.find(item => item.name === 'ctf_gp_exec')
+  const result = await gp.execute(
+    { code: 'print(factor(2^64 - 1))' },
+    { signal: new AbortController().signal, agent: { session: { header: { cwd: workspace } } } },
+  )
+  assert.equal(result.status, 'ok')
+  assert.match(result.output, /3|65537/)
+})
+
 test('crypto setup requests identify missing Sage and PARI/GP backends', async () => {
   const registered = []
   ctfPlugin.apply({ tools: { register: tool => registered.push(tool) } }, config)
   const setup = registered.find(item => item.name === 'ctf_tool_setup')
   const sage = await setup.execute({ target: 'sage' }, { signal: new AbortController().signal })
   const gp = await setup.execute({ target: 'pari_gp' }, { signal: new AbortController().signal })
+  const windows = await setup.execute({ target: 'windows_re' }, { signal: new AbortController().signal })
+  const android = await setup.execute({ target: 'android_re' }, { signal: new AbortController().signal })
+  const arm = await setup.execute({ target: 'arm_re' }, { signal: new AbortController().signal })
   assert.equal(sage.status, 'human_required')
   assert.equal(sage.target, 'sage')
   assert.match(sage.request.operationOrder[0].command, /sagemath/)
   assert.equal(gp.status, 'human_required')
   assert.equal(gp.target, 'pari_gp')
   assert.match(gp.request.operationOrder[0].command, /pari/)
+  assert.equal(windows.target, 'windows_re')
+  assert.equal(android.target, 'android_re')
+  assert.equal(arm.target, 'arm_re')
+  for (const result of [windows, android, arm]) {
+    assert.equal(result.status, 'human_required')
+    assert.ok(result.request.operationOrder.every(operation => operation.command || operation.instruction))
+    assert.deepEqual(result.request.acceptedReturnTypes, ['log', 'screenshot', 'ocr_text'])
+  }
 })
 
 test('ctf_http_request and ctf_http_diff work against a local HTTP service', async () => {

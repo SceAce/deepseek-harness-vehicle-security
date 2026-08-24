@@ -163,6 +163,11 @@ CTF 侧目标是工具优先：先审计本机能力、初检文件或 URL，再
 | `ctf_re_profile` | 用 `file/readelf/strings` 等工具提取逆向线索 |
 | `ctf_re_r2_query` | 调用本机 radare2 执行受限的 headless 命令并保留 JSON/原始输出 |
 | `ctf_re_ida_script` | 生成以 IDAPython 为主的函数、字符串和交叉引用分析脚本；可选 IDA batch 执行 |
+| `ctf_re_pe_profile` | 用 llvm-readobj/llvm-objdump 分析 Windows PE 的头、节、导入、导出和加载信息 |
+| `ctf_re_android_profile` | 用 aapt2/JADX 分析 APK，并审计 ADB、Frida 等运行时后端 |
+| `ctf_re_arch_profile` | 分析 ARM/AArch64 等非 x86 文件，并审计 LLVM、QEMU 后端 |
+| `ctf_re_android_jadx` | 用 JADX 将 APK/DEX 反编译到工作区分析目录并返回生成文件列表 |
+| `ctf_re_qemu_probe` | 用 QEMU user mode 对 ARM/AArch64 文件做有界运行探针 |
 | `ctf_pwn_profile` | 提取 ELF 保护、导入、字符串、checksec 输出和后续调试/gadget 动作 |
 | `ctf_pwninit` | 使用本机 pwninit 自动选择/切换 `ld` 与 `libc`，执行诊断、备份列表和恢复；默认不进入交互向导 |
 | `ctf_pwn_debug_probe` | 用 GDB batch 采集入口点、寄存器、栈、反汇编和回溯 |
@@ -179,7 +184,7 @@ CTF 侧目标是工具优先：先审计本机能力、初检文件或 URL，再
 | `ctf_http_diff` | 对比两次 HTTP 请求的状态、长度和响应 hash |
 | `ctf_web_browser_probe` | 用本机 Chromium/Chrome headless 获取 DOM、标题和截图 |
 | `ctf_web_capture_probe` | 检查 mitmproxy/mitmweb 并生成启动实时抓包的人工 MCP 请求 |
-| `ctf_tool_setup` | 生成 GDB/Pwndbg、IDA、r2、Sage、PARI/GP、mcp-chrome、mitmproxy、Python CTF 环境和 BlackArch 的安装配置请求 |
+| `ctf_tool_setup` | 生成 GDB/Pwndbg、IDA、r2、Sage、PARI/GP、Windows、Android、ARM、多架构、mcp-chrome、mitmproxy、Python CTF 环境和 BlackArch 的安装配置请求 |
 | `ctf_human_request` | 生成结构化人工动作请求，把用户当作可调用的电脑/环境 MCP |
 
 ### CTF Skills
@@ -194,7 +199,7 @@ $solve-ctf-web     -> Web 工具图
 
 `ctf_human_request` 要求模型先给出操作顺序，再给出每步的命令或指令；人类侧只回传 `log`、`screenshot` 或 `ocr_text`，不再依赖自由文本补充。
 
-`ctf_start` 还会返回结构化 `toolGraph` 和 `toolChoices`。`toolChoices` 包含工具、示例参数、后端能力和可用状态；它们是给模型决策的证据，不是固定执行顺序。RE、PWN、Crypto、WEB 的图分别从 `ctf_re_profile`、`ctf_pwn_profile`、`ctf_crypto_probe`、`ctf_http_request` 开始。
+`ctf_start` 还会返回结构化 `toolGraph` 和 `toolChoices`。`toolChoices` 包含工具、示例参数、后端能力和可用状态；它们是给模型决策的证据，不是固定执行顺序。RE、PWN、Crypto、WEB 的图分别从 `ctf_re_profile`、`ctf_pwn_profile`、`ctf_crypto_probe`、`ctf_http_request` 开始；PE、APK 和 ARM 文件会在 RE 图中插入对应的平台画像工具。
 
 ### CTF 工具安装与外部 MCP
 
@@ -218,7 +223,9 @@ CTF 工具的 Python 解释器固定为：
 /home/source/tools/PyVenv/CTF/bin/python -m pip install PACKAGE
 ```
 
-当前环境已经检测到 pwntools、Z3、SymPy、PyCryptodome、gmpy2、requests、Pillow、Unicorn、Capstone、LIEF 和 BeautifulSoup；Sage、PARI/GP、Scapy、angr、Playwright 等缺失能力会以推荐项显示。
+当前环境已经检测到 pwntools、Z3、SymPy、PyCryptodome、gmpy2、requests、Pillow、Unicorn、Capstone、LIEF 和 BeautifulSoup；Sage、PARI/GP、LLVM、QEMU、Android、Windows 和其他缺失能力会以推荐项显示。
+
+密码学后端分别检测 `sage` 和 `gp` 可执行文件。`pari` 软件包提供的是 `/usr/bin/gp`；`sage-gis`/`saga-gis` 之类 GIS 工具不等价于 SageMath，不能作为 `ctf_sage_exec` 的后端。若 `ctf_tool_audit` 仍显示 `crypto.sage: available=false`，请确认 SageMath 本体的 `sage` 命令已在 DSH 进程的 `PATH` 中。
 
 除工具名、命令、路径、代码和原始日志外，CTF Skill 要求模型使用中文交流。
 
