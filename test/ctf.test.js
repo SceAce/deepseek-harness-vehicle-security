@@ -136,17 +136,29 @@ test('uses the fixed CTF Python interpreter without environment fallbacks', asyn
 })
 
 test('ctf_python_exec always uses the fixed CTF interpreter', async () => {
+  const workspace = await mkdtemp(path.join(os.tmpdir(), 'dsh-ctf-python-cwd-'))
+  await writeFile(path.join(workspace, 'marker.txt'), 'workspace-marker\n')
   const registered = []
-  ctfPlugin.apply({ tools: { register: tool => registered.push(tool) } }, config)
-  const python = registered.find(item => item.name === 'ctf_python_exec')
-  const result = await python.execute(
-    { code: 'import sys; print(sys.executable)' },
-    { signal: new AbortController().signal, agent: { session: { header: { cwd: process.cwd() } } } },
-  )
+  try {
+    ctfPlugin.apply({ tools: { register: tool => registered.push(tool) } }, {
+      ...config,
+      workspaceRoot: undefined,
+    })
+    const python = registered.find(item => item.name === 'ctf_python_exec')
+    const result = await python.execute(
+      { code: 'import os, sys; print(sys.executable); print(os.getcwd()); print(os.path.exists("marker.txt"))' },
+      { signal: new AbortController().signal, agent: { session: { header: { cwd: workspace } } } },
+    )
 
-  assert.equal(result.status, 'ok')
-  assert.equal(result.python.executable, DEFAULT_CTF_PYTHON)
-  assert.ok(result.output.includes(DEFAULT_CTF_PYTHON))
+    assert.equal(result.status, 'ok')
+    assert.equal(result.python.executable, DEFAULT_CTF_PYTHON)
+    assert.match(result.output, new RegExp(DEFAULT_CTF_PYTHON.replaceAll('/', '\\/')))
+    assert.match(result.output, new RegExp(workspace.replaceAll('/', '\\/')))
+    assert.match(result.output, /True/)
+    assert.equal(result.commands[0].cwd, workspace)
+  } finally {
+    await import('node:fs/promises').then(fs => fs.rm(workspace, { recursive: true, force: true }))
+  }
 })
 
 test('detects an IDA CLI absolute path supplied through DSH_CTF_IDA', async t => {
@@ -355,6 +367,31 @@ test('ctf_re_r2_query executes local radare2 and ctf_re_ida_script remains usefu
   assert.match(ida.script, /collect_xrefs/)
   assert.equal(ida.executed, false)
   assert.ok(['ok', 'missing_capability'].includes(ida.status))
+})
+
+test('ctf_re_r2_query keeps undefined cwd out of the real DSH output', async t => {
+  const workspace = await mkdtemp(path.join(os.tmpdir(), 'dsh-ctf-r2-runtime-'))
+  t.after(() => import('node:fs/promises').then(fs => fs.rm(workspace, { recursive: true, force: true })))
+  await copyFile('/bin/true', path.join(workspace, 'chall'))
+
+  const ctx = new Context()
+  await ctx.plugin(SystemPrompt)
+  await ctx.plugin(ToolRuntime, { mode: 'native' })
+  await ctx.plugin(ctfPlugin, {
+    ...config,
+    workspaceRoot: workspace,
+    commandTimeoutMs: 5000,
+  })
+
+  const result = await ctx.tools.execute({
+    callId: 'ctf-runtime-r2-cwd',
+    name: 'ctf_re_r2_query',
+    arguments: { path: 'chall', commands: ['ij'] },
+    signal: new AbortController().signal,
+  })
+
+  assert.equal(result.isError, false)
+  assert.ok(result.content.some(block => block.type === 'text'))
 })
 
 test('ctf_tool_audit exposes local capability and external MCP state', async () => {

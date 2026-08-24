@@ -63,9 +63,9 @@ export async function runCtfPython(
 
   const capture = await runCommand(environment.executable, commandArgv, {
     ...options,
-    cwd: script?.root ?? options.cwd,
+    cwd: script?.root ?? options.cwd ?? options.workspaceRoot,
   })
-  base.commands.push(commandRecord(environment.executable, commandArgv, capture, script?.root ?? options.cwd))
+  base.commands.push(commandRecord(environment.executable, commandArgv, capture, script?.root ?? options.cwd ?? options.workspaceRoot))
   base.observations.push(`Executed the fixed CTF Python interpreter: ${environment.executable}`)
   if (!capture.ok) {
     base.status = 'failed'

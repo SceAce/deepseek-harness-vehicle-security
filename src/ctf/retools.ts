@@ -46,16 +46,7 @@ export async function queryRadare2(
   const capture = await runCommand(r2, argv, { ...options, maxOutputChars: Math.max(options.maxOutputChars ?? 60_000, 120_000) })
   const rawOutput = [capture.stdout, capture.stderr].filter(Boolean).join('\n').trim() || null
   const json = tryParseJson(capture.stdout)
-  base.commands.push({
-    executable: r2,
-    argv,
-    cwd: options.cwd,
-    ok: capture.ok,
-    exitCode: capture.exitCode,
-    stdout: capture.stdout,
-    stderr: capture.stderr,
-    error: capture.error,
-  })
+  base.commands.push(commandRecord(r2, argv, capture, options.cwd))
   base.observations.push(`radare2 executed ${query.length} commands against ${file.relativePath}.`)
   if (!capture.ok) base.limitations.push(`r2 exited with ${capture.exitCode ?? 'no status'}: ${capture.error ?? capture.stderr.trim()}`)
   return {
