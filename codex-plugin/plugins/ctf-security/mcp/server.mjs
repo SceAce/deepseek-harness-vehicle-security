@@ -247,6 +247,34 @@ const tools = [
     },
   },
   {
+    name: 'ctf_sage_exec',
+    description: 'Execute SageMath code or a workspace script for CTF number theory, finite fields, elliptic curves, and symbolic calculations.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ...workspaceProperties,
+        code: { type: 'string' },
+        scriptPath: { type: 'string' },
+        argv: { type: 'array', items: { type: 'string' } },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'ctf_gp_exec',
+    description: 'Execute PARI/GP code or a workspace script for CTF integer arithmetic, factorization, discrete logarithms, and algebraic number theory.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ...workspaceProperties,
+        code: { type: 'string' },
+        scriptPath: { type: 'string' },
+        argv: { type: 'array', items: { type: 'string' } },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
     name: 'ctf_misc_triage',
     description: 'Misc/forensics triage using local tools such as binwalk, exiftool, 7z, strings, and zsteg.',
     inputSchema: {
@@ -332,7 +360,7 @@ const tools = [
     inputSchema: {
       type: 'object',
       properties: {
-        target: { type: 'string', enum: ['gdb_pwndbg', 'ida_pro', 'r2', 'one_gadget', 'seccomp_tools', 'chrome_mcp', 'chrome_devtools_mcp', 'mitmproxy', 'python_ctf_env', 'blackarch_repo'] },
+        target: { type: 'string', enum: ['gdb_pwndbg', 'ida_pro', 'r2', 'one_gadget', 'seccomp_tools', 'sage', 'pari_gp', 'chrome_mcp', 'chrome_devtools_mcp', 'mitmproxy', 'python_ctf_env', 'blackarch_repo'] },
         context: { type: 'string' },
       },
       required: ['target'],
@@ -539,6 +567,30 @@ async function callTool(name, args) {
       const file = args.path ? await workspaceFile(args) : undefined
       return probeCryptoInput({ file, text: args.text })
     }
+    case 'ctf_sage_exec': {
+      const { runCtfCryptoEngine } = await runtime('crypto-exec')
+      return runCtfCryptoEngine('sage', {
+        code: args.code,
+        scriptPath: args.scriptPath,
+        argv: args.argv,
+      }, {
+        ...commandOptions,
+        workspaceRoot: args.workspaceRoot,
+        maxFileBytes,
+      })
+    }
+    case 'ctf_gp_exec': {
+      const { runCtfCryptoEngine } = await runtime('crypto-exec')
+      return runCtfCryptoEngine('gp', {
+        code: args.code,
+        scriptPath: args.scriptPath,
+        argv: args.argv,
+      }, {
+        ...commandOptions,
+        workspaceRoot: args.workspaceRoot,
+        maxFileBytes,
+      })
+    }
     case 'ctf_misc_triage': {
       const { triageMiscArtifact } = await runtime('misc')
       return triageMiscArtifact(await workspaceFile(args), commandOptions)
@@ -587,7 +639,7 @@ async function callTool(name, args) {
     case 'ctf_tool_setup': {
       const { createToolSetupRequest } = await runtime('setup')
       const target = requireString(args.target, 'target')
-      if (!['gdb_pwndbg', 'ida_pro', 'r2', 'one_gadget', 'seccomp_tools', 'chrome_mcp', 'chrome_devtools_mcp', 'mitmproxy', 'python_ctf_env', 'blackarch_repo'].includes(target)) {
+      if (!['gdb_pwndbg', 'ida_pro', 'r2', 'one_gadget', 'seccomp_tools', 'sage', 'pari_gp', 'chrome_mcp', 'chrome_devtools_mcp', 'mitmproxy', 'python_ctf_env', 'blackarch_repo'].includes(target)) {
         throw new Error(`unknown setup target: ${target}`)
       }
       return createToolSetupRequest(target, typeof args.context === 'string' ? args.context : undefined)

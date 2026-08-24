@@ -5,7 +5,7 @@ description: Tool-first CTF investigation for RE, pwn, crypto, misc, and web cha
 
 # Investigate CTF
 
-Use the tool layer before writing a solver. When the local capability state or artifact category is unknown, call `ctf_tool_audit` and/or `ctf_start`; when the target and required backend are already known, call the relevant category tool directly. For focused work, switch to `$solve-ctf-re`, `$solve-ctf-pwn`, or `$solve-ctf-web`.
+Use the tool layer before writing a solver. When the local capability state or artifact category is unknown, call `ctf_tool_audit` and/or `ctf_start`; when the target and required backend are already known, call the relevant category tool directly. For focused work, switch to `$solve-ctf-re`, `$solve-ctf-pwn`, `$solve-ctf-crypto`, or `$solve-ctf-web`.
 
 ## Language and Pwn startup rules
 
@@ -31,7 +31,8 @@ Use the tool layer before writing a solver. When the local capability state or a
 
 - Intake: `ctf_start`, `ctf_tool_audit`, `ctf_artifact_profile`
 - RE/Pwn: `ctf_re_profile`, `ctf_pwn_profile`, `ctf_pwninit`, `ctf_pwn_debug_probe`, `ctf_pwn_gdb_probe`, `ctf_re_r2_query`, `ctf_re_ida_script`, `ctf_rop_search`, `ctf_one_gadget`, `ctf_seccomp_profile`, `ctf_python_exec`
-- Crypto/Misc: `ctf_crypto_probe`, `ctf_misc_triage`, `ctf_pcap_profile`
+- Crypto: `ctf_crypto_probe`, `ctf_sage_exec`, `ctf_gp_exec`, `ctf_python_exec`
+- Misc: `ctf_misc_triage`, `ctf_pcap_profile`
 - Web: `ctf_http_request`, `ctf_http_diff`, `ctf_web_browser_probe`, `ctf_web_capture_probe`
 - MCP/configuration: `ctf_mcp_configure`, `mcp.ida_pro`, `mcp.r2`, `mcp.gdb_pwndbg`, `mcp.chrome`, `mcp.tavily`
 - Human actions: `ctf_human_request`
@@ -42,6 +43,7 @@ Use the tool layer before writing a solver. When the local capability state or a
 
 - Use `$solve-ctf-re` for binaries, decompilation, string/import tracing, and implementation recovery.
 - Use `$solve-ctf-pwn` for mitigations, runtime probing, gadget search, and exploit validation.
+- Use `$solve-ctf-crypto` for encoding triage, integer arithmetic, algebra, finite fields, elliptic curves, and constraint solving.
 - Use `$solve-ctf-web` for HTTP baselines, response diffs, and service handoff.
 
 ## Evidence

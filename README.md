@@ -171,13 +171,15 @@ CTF 侧目标是工具优先：先审计本机能力、初检文件或 URL，再
 | `ctf_one_gadget` | 对题目目录中的匹配 libc 调用 one_gadget，返回偏移、调用形式和约束 |
 | `ctf_seccomp_profile` | 调用 seccomp-tools 转储 seccomp 规则并提取 syscall 名称 |
 | `ctf_crypto_probe` | 检测 hex/base64/binary-ascii、熵、hash 和单字节 XOR 候选 |
+| `ctf_sage_exec` | 按需调用 SageMath 执行内联代码或工作区脚本，适合有限域、椭圆曲线、符号代数和数论 |
+| `ctf_gp_exec` | 按需调用 PARI/GP 执行内联代码或工作区脚本，适合整数运算、分解和离散对数 |
 | `ctf_misc_triage` | 用 binwalk、exiftool、7z、strings、zsteg 做 Misc/取证初检 |
 | `ctf_pcap_profile` | 用 tshark 汇总 PCAP 协议层级和 TCP/UDP 会话 |
 | `ctf_http_request` | 用 curl 发起结构化 HTTP 请求并返回状态、长度、hash 和预览 |
 | `ctf_http_diff` | 对比两次 HTTP 请求的状态、长度和响应 hash |
 | `ctf_web_browser_probe` | 用本机 Chromium/Chrome headless 获取 DOM、标题和截图 |
 | `ctf_web_capture_probe` | 检查 mitmproxy/mitmweb 并生成启动实时抓包的人工 MCP 请求 |
-| `ctf_tool_setup` | 生成 GDB/Pwndbg、IDA、r2、mcp-chrome、mitmproxy、Python CTF 环境和 BlackArch 的安装配置请求 |
+| `ctf_tool_setup` | 生成 GDB/Pwndbg、IDA、r2、Sage、PARI/GP、mcp-chrome、mitmproxy、Python CTF 环境和 BlackArch 的安装配置请求 |
 | `ctf_human_request` | 生成结构化人工动作请求，把用户当作可调用的电脑/环境 MCP |
 
 ### CTF Skills
@@ -186,12 +188,13 @@ CTF 侧目标是工具优先：先审计本机能力、初检文件或 URL，再
 $investigate-ctf   -> 总入口，先路由再下钻
 $solve-ctf-re      -> 逆向工具图
 $solve-ctf-pwn     -> Pwn 工具图
+$solve-ctf-crypto  -> 密码学工具图
 $solve-ctf-web     -> Web 工具图
 ```
 
 `ctf_human_request` 要求模型先给出操作顺序，再给出每步的命令或指令；人类侧只回传 `log`、`screenshot` 或 `ocr_text`，不再依赖自由文本补充。
 
-`ctf_start` 还会返回结构化 `toolGraph` 和 `toolChoices`。`toolChoices` 包含工具、示例参数、后端能力和可用状态；它们是给模型决策的证据，不是固定执行顺序。RE、PWN、WEB 的图分别从 `ctf_re_profile`、`ctf_pwn_profile`、`ctf_http_request` 开始。
+`ctf_start` 还会返回结构化 `toolGraph` 和 `toolChoices`。`toolChoices` 包含工具、示例参数、后端能力和可用状态；它们是给模型决策的证据，不是固定执行顺序。RE、PWN、Crypto、WEB 的图分别从 `ctf_re_profile`、`ctf_pwn_profile`、`ctf_crypto_probe`、`ctf_http_request` 开始。
 
 ### CTF 工具安装与外部 MCP
 
@@ -215,7 +218,7 @@ CTF 工具的 Python 解释器固定为：
 /home/source/tools/PyVenv/CTF/bin/python -m pip install PACKAGE
 ```
 
-当前环境已经检测到 pwntools、Z3、SymPy、PyCryptodome、gmpy2、requests、Pillow、Unicorn、Capstone、LIEF 和 BeautifulSoup；缺失的 Scapy、angr、Playwright 等会以推荐项显示。
+当前环境已经检测到 pwntools、Z3、SymPy、PyCryptodome、gmpy2、requests、Pillow、Unicorn、Capstone、LIEF 和 BeautifulSoup；Sage、PARI/GP、Scapy、angr、Playwright 等缺失能力会以推荐项显示。
 
 除工具名、命令、路径、代码和原始日志外，CTF Skill 要求模型使用中文交流。
 
@@ -334,6 +337,7 @@ npx @deepseek-ai/dsh@next web
 如果工作区同时有 `ld-*.so*` 和 `libc-*.so*`，`ctf_pwninit` 会先切换运行时，再调用 `ctf_pwn_gdb_probe` 验证目标 glibc 已加载。
 Python 辅助代码优先调用 `ctf_python_exec`，它固定使用 `/home/source/tools/PyVenv/CTF/bin/python`。
 对 cipher.txt 做 ctf_crypto_probe，先不要写脚本。
+如果密码题需要有限域、椭圆曲线或 Sage 数论对象，调用 `ctf_sage_exec`；如果需要快速整数分解、离散对数或 PARI/GP 数论函数，调用 `ctf_gp_exec`；两者不可用时使用固定 CTF Python 的 Z3、SymPy、gmpy2 或 PyCryptodome。
 对 capture.pcapng 做 ctf_pcap_profile。
 对 http://127.0.0.1:8080/ 做 ctf_http_request，并用 ctf_http_diff 对比参数变化。
 服务还没启动，生成 ctf_human_request 告诉我要做什么并返回哪些字段。

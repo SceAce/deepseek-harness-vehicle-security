@@ -412,8 +412,8 @@ function recommendations(capabilities: CtfCapability[], modules: CtfCapability[]
   if (!mcp.some(item => item.id === 'mcp.tavily' && item.configured)) {
     result.push('When CVE or version research is needed, provide TAVILY_API_KEY to ctf_mcp_configure; the key must not be pasted into logs or JSON shown to the model.')
   }
-  if (!available.has('crypto.sage') && !available.has('python.z3') && !available.has('python.sympy')) {
-    result.push('Install Sage, z3, or SymPy for crypto challenge solving.')
+  if (!available.has('crypto.sage') && !available.has('crypto.gp') && !available.has('python.z3') && !available.has('python.sympy')) {
+    result.push('Install Sage, PARI/GP, z3, or SymPy for crypto challenge solving.')
   }
   for (const item of mcp.filter(item => !item.configured)) {
     if (item.id === 'mcp.tavily' || item.id === 'mcp.chrome') continue
@@ -434,6 +434,15 @@ interface ToolBindingSpec {
 }
 
 const TOOL_BINDINGS: ToolBindingSpec[] = [
+  {
+    tool: 'ctf_crypto_probe',
+    category: 'crypto',
+    purpose: 'Detect common encodings, entropy, hashes, and single-byte XOR candidates before a solver is written.',
+    when: 'Text or a small crypto artifact needs structured first-pass classification.',
+    backendCapabilities: [],
+    fallbackTool: 'ctf_tool_audit',
+    exampleArgs: { text: '414243' },
+  },
   {
     tool: 'ctf_python_exec',
     category: 'auto',
@@ -540,6 +549,24 @@ const TOOL_BINDINGS: ToolBindingSpec[] = [
     backendCapabilities: ['pwn.seccomp_tools'],
     fallbackTool: 'ctf_pwn_profile',
     exampleArgs: { path: 'pwn', format: 'disasm', limit: 1 },
+  },
+  {
+    tool: 'ctf_sage_exec',
+    category: 'crypto',
+    purpose: 'Run SageMath code or a workspace script for number theory, finite fields, elliptic curves, and symbolic crypto calculations.',
+    when: 'Crypto evidence calls for Sage-specific algebra or number-theory operations.',
+    backendCapabilities: ['crypto.sage'],
+    fallbackTool: 'ctf_python_exec',
+    exampleArgs: { code: 'print(factor(2^64 - 1))' },
+  },
+  {
+    tool: 'ctf_gp_exec',
+    category: 'crypto',
+    purpose: 'Run PARI/GP code or a workspace script for fast integer arithmetic, factorization, and algebraic number theory.',
+    when: 'PARI/GP is a better fit than Sage or Python for the concrete arithmetic query.',
+    backendCapabilities: ['crypto.gp'],
+    fallbackTool: 'ctf_sage_exec',
+    exampleArgs: { code: 'factor(2^64 - 1)' },
   },
   {
     tool: 'ctf_http_request',

@@ -93,6 +93,8 @@ export function toolGraphForCategory(category: ResolvedCtfCategory): CtfToolGrap
           { tool: 'ctf_pwn_debug_probe', role: 'observe runtime branches, registers, and memory', when: 'static evidence needs runtime confirmation' },
           { tool: 'ctf_rop_search', role: 'search gadgets', when: 'gadget-based control flow is plausible' },
           { tool: 'ctf_crypto_probe', role: 'probe encodings and constants', when: 'strings or constants suggest an encoding/crypto path' },
+          { tool: 'ctf_sage_exec', role: 'run SageMath number theory and algebra', when: 'Sage-specific finite-field, elliptic-curve, or symbolic operations are useful' },
+          { tool: 'ctf_gp_exec', role: 'run PARI/GP arithmetic', when: 'fast factorization or integer/algebraic arithmetic is useful' },
           { tool: 'mcp.tavily', role: 'search CVEs, vulnerable versions, and external technical references', when: 'external version or vulnerability context is required and Tavily MCP is configured' },
           { tool: 'ctf_human_request', role: 'handoff a required environment action', when: 'a person must operate a GUI, device, or service' },
         ],
@@ -108,6 +110,8 @@ export function toolGraphForCategory(category: ResolvedCtfCategory): CtfToolGrap
           { from: 'ctf_re_profile', to: 'ctf_pwn_debug_probe', condition: 'runtime behavior must confirm a static hypothesis' },
           { from: 'ctf_re_profile', to: 'ctf_rop_search', condition: 'gadget search is relevant' },
           { from: 'ctf_re_profile', to: 'ctf_crypto_probe', condition: 'encoded constants or crypto indicators are present' },
+          { from: 'ctf_re_profile', to: 'ctf_sage_exec', condition: 'crypto evidence requires Sage-specific algebra or number theory' },
+          { from: 'ctf_re_profile', to: 'ctf_gp_exec', condition: 'crypto evidence requires PARI/GP arithmetic' },
           { from: 'ctf_re_profile', to: 'mcp.tavily', condition: 'CVE, dependency, version, or protocol reference lookup is required' },
           { from: 'ctf_re_profile', to: 'ctf_human_request', condition: 'required runtime environment is human-operated' },
         ],
@@ -146,6 +150,31 @@ export function toolGraphForCategory(category: ResolvedCtfCategory): CtfToolGrap
           { from: 'ctf_pwn_profile', to: 'ctf_seccomp_profile', condition: 'prctl/seccomp/sandbox evidence is present' },
           { from: 'ctf_pwn_profile', to: 'mcp.tavily', condition: 'CVE, libc, or tool-version lookup is required' },
           { from: 'ctf_pwn_profile', to: 'ctf_human_request', condition: 'target service or device is not available to tools' },
+        ],
+      }
+    case 'crypto':
+      return {
+        category,
+        entry: 'ctf_crypto_probe',
+        nodes: [
+          { tool: 'ctf_start', role: 'route the challenge and select the crypto path', when: 'always for a new crypto challenge' },
+          { tool: 'ctf_tool_audit', role: 'discover Sage, GP, fixed Python, and solver modules', when: 'crypto capability state is unknown or stale' },
+          { tool: 'ctf_artifact_profile', role: 'anchor a local crypto artifact', when: 'a file or script is present' },
+          { tool: 'ctf_crypto_probe', role: 'detect encodings, entropy, hashes, and simple XOR candidates', when: 'text or a small file needs first-pass classification' },
+          { tool: 'ctf_sage_exec', role: 'run SageMath code or a workspace script', when: 'finite fields, elliptic curves, symbolic algebra, or Sage-specific number theory is useful' },
+          { tool: 'ctf_gp_exec', role: 'run PARI/GP code or a workspace script', when: 'factorization, discrete logarithms, or integer arithmetic is the focused operation' },
+          { tool: 'ctf_python_exec', role: 'run the fixed Python environment with Z3, SymPy, gmpy2, or PyCryptodome', when: 'Python modules are sufficient or Sage/GP is unavailable' },
+          { tool: 'ctf_human_request', role: 'request a missing challenge input or human-only setup', when: 'required data or setup must come from a person' },
+        ],
+        edges: [
+          { from: 'ctf_start', to: 'ctf_tool_audit', condition: 'crypto capability inventory is missing' },
+          { from: 'ctf_start', to: 'ctf_artifact_profile', condition: 'a local crypto artifact path is provided' },
+          { from: 'ctf_start', to: 'ctf_crypto_probe', condition: 'text or a small artifact is available for classification' },
+          { from: 'ctf_crypto_probe', to: 'ctf_sage_exec', condition: 'Sage backend is available and the evidence needs Sage-specific algebra' },
+          { from: 'ctf_crypto_probe', to: 'ctf_gp_exec', condition: 'GP backend is available and the evidence needs focused arithmetic' },
+          { from: 'ctf_crypto_probe', to: 'ctf_python_exec', condition: 'fixed Python modules answer the concrete solver question' },
+          { from: 'ctf_tool_audit', to: 'ctf_tool_setup', condition: 'Sage or GP is required but missing' },
+          { from: 'ctf_crypto_probe', to: 'ctf_human_request', condition: 'challenge data or a human-only setup step is missing' },
         ],
       }
     case 'web':
@@ -301,6 +330,15 @@ function choicesForCategory(
       choice(audit, 'ctf_re_r2_query', { ...pathArgs, commands: ['aaa', 'ij', 'afl'] }, 'Use for fast headless disassembly, metadata, and xrefs.'),
       choice(audit, 'ctf_re_ida_script', { ...pathArgs, focus: '', execute: false }, 'Use when IDA database/decompiler state or IDAPython is useful.'),
       choice(audit, 'ctf_pwn_gdb_probe', { ...pathArgs, breakAt: 'main' }, 'Use only when runtime behavior must validate a static hypothesis.'),
+    ]
+  }
+  if (category === 'crypto') {
+    const cryptoArgs = pathArgs ?? {}
+    return [
+      choice(audit, 'ctf_crypto_probe', pathArgs ? cryptoArgs : { text: input.context ?? input.objective ?? '' }, 'Start with structured encoding, entropy, hash, and XOR evidence.'),
+      choice(audit, 'ctf_sage_exec', { code: 'print(factor(2^64 - 1))' }, 'Use when finite fields, elliptic curves, symbolic algebra, or Sage-specific number theory is relevant.'),
+      choice(audit, 'ctf_gp_exec', { code: 'factor(2^64 - 1)' }, 'Use when fast factorization or PARI/GP arithmetic is the focused question.'),
+      choice(audit, 'ctf_python_exec', { code: 'from sympy import factorint; print(factorint(2**64 - 1))' }, 'Use the fixed CTF Python environment when Z3, SymPy, gmpy2, or PyCryptodome is sufficient.'),
     ]
   }
   if (category === 'web' && input.url) {

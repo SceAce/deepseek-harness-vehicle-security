@@ -39,6 +39,8 @@ const CTF_TOOL_NAMES = [
   'ctf_one_gadget',
   'ctf_seccomp_profile',
   'ctf_crypto_probe',
+  'ctf_sage_exec',
+  'ctf_gp_exec',
   'ctf_misc_triage',
   'ctf_pcap_profile',
   'ctf_http_request',
@@ -51,6 +53,7 @@ const CTF_TOOL_NAMES = [
 
 const CTF_SKILL_NAMES = [
   'investigate-ctf',
+  'solve-ctf-crypto',
   'solve-ctf-pwn',
   'solve-ctf-re',
   'solve-ctf-web',
@@ -745,6 +748,92 @@ test('ctf_crypto_probe detects simple hex text before script generation', async 
   assert.equal(result.encodings[0].decodedPreview, 'ABC')
 })
 
+test('crypto tool graph exposes Sage, GP, and fixed Python choices', async () => {
+  const registered = []
+  ctfPlugin.apply({ tools: { register: tool => registered.push(tool) } }, config)
+  const start = registered.find(item => item.name === 'ctf_start')
+  const result = await start.execute(
+    { category: 'crypto', objective: 'solve RSA factorization challenge', context: 'large composite modulus' },
+    { signal: new AbortController().signal },
+  )
+
+  assert.equal(result.category, 'crypto')
+  assert.equal(result.recommendedTool, 'ctf_crypto_probe')
+  assert.equal(result.toolGraph.entry, 'ctf_crypto_probe')
+  assert.ok(result.toolGraph.nodes.some(node => node.tool === 'ctf_sage_exec'))
+  assert.ok(result.toolGraph.nodes.some(node => node.tool === 'ctf_gp_exec'))
+  assert.ok(result.toolChoices.some(choice => choice.tool === 'ctf_sage_exec'))
+  assert.ok(result.toolChoices.some(choice => choice.tool === 'ctf_gp_exec'))
+  assert.ok(result.toolChoices.some(choice => choice.tool === 'ctf_python_exec'))
+})
+
+test('ctf_sage_exec and ctf_gp_exec run local crypto backends when present', async t => {
+  const workspace = await mkdtemp(path.join(os.tmpdir(), 'dsh-ctf-crypto-exec-'))
+  const toolBin = path.join(workspace, 'bin')
+  await mkdir(toolBin)
+  await writeFile(path.join(toolBin, 'sage'), [
+    '#!/bin/sh',
+    'printf "%s\\n" "sage-fixture $*"',
+    'printf "%s\\n" "factor(2^64 - 1)"',
+    '',
+  ].join('\n'))
+  await writeFile(path.join(toolBin, 'gp'), [
+    '#!/bin/sh',
+    'printf "%s\\n" "gp-fixture $*"',
+    'printf "%s\\n" "[3, 5, 17]"',
+    '',
+  ].join('\n'))
+  await chmod(path.join(toolBin, 'sage'), 0o755)
+  await chmod(path.join(toolBin, 'gp'), 0o755)
+  t.after(() => import('node:fs/promises').then(fs => fs.rm(workspace, { recursive: true, force: true })))
+
+  const previousPath = process.env.PATH
+  process.env.PATH = toolBin
+  try {
+    const registered = []
+    ctfPlugin.apply({ tools: { register: tool => registered.push(tool) } }, {
+      ...config,
+      workspaceRoot: undefined,
+    })
+    const execution = {
+      signal: new AbortController().signal,
+      agent: { session: { header: { cwd: workspace } } },
+    }
+    const sage = await registered.find(item => item.name === 'ctf_sage_exec').execute(
+      { code: 'print(factor(2^64 - 1))' },
+      execution,
+    )
+    const gp = await registered.find(item => item.name === 'ctf_gp_exec').execute(
+      { code: 'factor(2^64 - 1)' },
+      execution,
+    )
+    assert.equal(sage.status, 'ok')
+    assert.match(sage.output, /sage-fixture/)
+    assert.equal(sage.engine.name, 'sage')
+    assert.equal(gp.status, 'ok')
+    assert.match(gp.output, /gp-fixture/)
+    assert.equal(gp.engine.name, 'gp')
+    assert.ok(sage.commands[0].argv.some(argument => /\.sage$/.test(argument)))
+    assert.ok(gp.commands[0].argv.some(argument => /\.gp$/.test(argument)))
+  } finally {
+    process.env.PATH = previousPath
+  }
+})
+
+test('crypto setup requests identify missing Sage and PARI/GP backends', async () => {
+  const registered = []
+  ctfPlugin.apply({ tools: { register: tool => registered.push(tool) } }, config)
+  const setup = registered.find(item => item.name === 'ctf_tool_setup')
+  const sage = await setup.execute({ target: 'sage' }, { signal: new AbortController().signal })
+  const gp = await setup.execute({ target: 'pari_gp' }, { signal: new AbortController().signal })
+  assert.equal(sage.status, 'human_required')
+  assert.equal(sage.target, 'sage')
+  assert.match(sage.request.operationOrder[0].command, /sagemath/)
+  assert.equal(gp.status, 'human_required')
+  assert.equal(gp.target, 'pari_gp')
+  assert.match(gp.request.operationOrder[0].command, /pari/)
+})
+
 test('ctf_http_request and ctf_http_diff work against a local HTTP service', async () => {
   const server = createServer((req, res) => {
     const body = req.url === '/right' ? 'right-body' : 'left-body'
@@ -912,6 +1001,7 @@ test('registers packaged CTF skill through a separate provider', async () => {
   assert.match((await ctx.skills.get('solve-ctf-re', { cwd: process.cwd() })).content, /ctf_re_profile/)
   assert.match((await ctx.skills.get('solve-ctf-pwn', { cwd: process.cwd() })).content, /ctf_pwn_profile/)
   assert.match((await ctx.skills.get('solve-ctf-web', { cwd: process.cwd() })).content, /ctf_http_request/)
+  assert.match((await ctx.skills.get('solve-ctf-crypto', { cwd: process.cwd() })).content, /ctf_sage_exec/)
 
   await fiber.dispose()
   assert.deepEqual(await ctx.skills.list({ cwd: process.cwd() }), [])

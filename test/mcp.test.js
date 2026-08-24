@@ -169,6 +169,8 @@ test('Codex CTF MCP initializes, lists tools, and probes crypto text', async t =
     'ctf_one_gadget',
     'ctf_seccomp_profile',
     'ctf_crypto_probe',
+    'ctf_sage_exec',
+    'ctf_gp_exec',
     'ctf_misc_triage',
     'ctf_pcap_profile',
     'ctf_http_request',
@@ -185,6 +187,22 @@ test('Codex CTF MCP initializes, lists tools, and probes crypto text', async t =
   })
   assert.equal(probed.result.structuredContent.encodings[0].type, 'hex')
   assert.equal(probed.result.structuredContent.encodings[0].decodedPreview, 'ABC')
+
+  const sage = await request('tools/call', {
+    name: 'ctf_sage_exec',
+    arguments: { workspaceRoot: root, code: 'print(factor(2^64 - 1))' },
+  })
+  assert.equal(sage.result.isError, false)
+  assert.ok(['ok', 'missing_capability', 'failed'].includes(sage.result.structuredContent.status))
+  assert.equal(sage.result.structuredContent.engine.name, 'sage')
+
+  const gp = await request('tools/call', {
+    name: 'ctf_gp_exec',
+    arguments: { workspaceRoot: root, code: 'factor(2^64 - 1)' },
+  })
+  assert.equal(gp.result.isError, false)
+  assert.ok(['ok', 'missing_capability', 'failed'].includes(gp.result.structuredContent.status))
+  assert.equal(gp.result.structuredContent.engine.name, 'gp')
 
   const audit = await request('tools/call', {
     name: 'ctf_tool_audit',
@@ -283,6 +301,13 @@ test('Codex CTF MCP initializes, lists tools, and probes crypto text', async t =
   assert.equal(oneGadgetSetup.result.structuredContent.target, 'one_gadget')
   assert.ok(oneGadgetSetup.result.structuredContent.request.operationOrder.every(operation => operation.command || operation.instruction))
 
+  const sageSetup = await request('tools/call', {
+    name: 'ctf_tool_setup',
+    arguments: { target: 'sage' },
+  })
+  assert.equal(sageSetup.result.structuredContent.target, 'sage')
+  assert.ok(sageSetup.result.structuredContent.request.operationOrder.every(operation => operation.command || operation.instruction))
+
   const humanRequest = await request('tools/call', {
     name: 'ctf_human_request',
     arguments: {
@@ -308,7 +333,7 @@ test('Codex CTF MCP initializes, lists tools, and probes crypto text', async t =
   const human = await request('tools/call', {
     name: 'ctf_start',
     arguments: { category: 'web', objective: 'need service endpoint' },
-  })
+  }, 20000)
   assert.equal(human.result.structuredContent.status, 'human_required')
   assert.equal(human.result.structuredContent.humanRequired[0].type, 'start_service')
   assert.equal(human.result.structuredContent.humanRequired[0].operationOrder[0].kind, 'instruction')

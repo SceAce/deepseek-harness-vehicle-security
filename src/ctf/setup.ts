@@ -7,6 +7,8 @@ export type CtfSetupTarget =
   | 'r2'
   | 'one_gadget'
   | 'seccomp_tools'
+  | 'sage'
+  | 'pari_gp'
   | 'chrome_mcp'
   | 'chrome_devtools_mcp'
   | 'mitmproxy'
@@ -203,6 +205,76 @@ function buildSetupRequest(target: CtfSetupTarget, context?: string): CtfHumanRe
           log: 'gem installation, version, and one_gadget output',
           screenshot: 'terminal screenshot text showing the installation or libc analysis',
           ocr_text: 'recognized text containing the executable path, version, offsets, or error',
+        },
+      )
+    case 'sage':
+      return requestFromOperations(
+        'start_service',
+        'Install and verify SageMath',
+        'Crypto analysis needs SageMath for finite fields, elliptic curves, symbolic algebra, or number theory.',
+        [
+          {
+            order: 1,
+            kind: 'command',
+            title: 'Install SageMath',
+            command: 'sudo pacman -S --needed sagemath',
+            expectedSignal: 'Return the package installation log or the exact package-manager error.',
+          },
+          {
+            order: 2,
+            kind: 'command',
+            title: 'Verify SageMath',
+            command: 'command -v sage; sage --version',
+            expectedSignal: 'Return the resolved Sage executable and version banner.',
+          },
+          {
+            order: 3,
+            kind: 'command',
+            title: 'Run a number-theory smoke test',
+            command: "sage -q -c 'print(factor(2^64 - 1))'",
+            expectedSignal: 'Return the factorization output or the exact Sage startup/error log.',
+          },
+        ],
+        context,
+        {
+          log: 'pacman installation log, Sage version, and factorization smoke-test output',
+          screenshot: 'terminal screenshot text showing Sage installation or verification',
+          ocr_text: 'recognized text containing the Sage path, version, or error',
+        },
+      )
+    case 'pari_gp':
+      return requestFromOperations(
+        'start_service',
+        'Install and verify PARI/GP',
+        'Crypto analysis needs PARI/GP for fast integer arithmetic, factorization, discrete logarithms, or algebraic number theory.',
+        [
+          {
+            order: 1,
+            kind: 'command',
+            title: 'Install PARI/GP',
+            command: 'sudo pacman -S --needed pari',
+            expectedSignal: 'Return the package installation log or the exact package-manager error.',
+          },
+          {
+            order: 2,
+            kind: 'command',
+            title: 'Verify PARI/GP',
+            command: 'command -v gp; gp --version',
+            expectedSignal: 'Return the resolved GP executable and version banner.',
+          },
+          {
+            order: 3,
+            kind: 'command',
+            title: 'Run an arithmetic smoke test',
+            command: "printf 'factor(2^64 - 1)\\nquit()\\n' | gp -q",
+            expectedSignal: 'Return the factorization output or the exact GP startup/error log.',
+          },
+        ],
+        context,
+        {
+          log: 'pacman installation log, GP version, and factorization smoke-test output',
+          screenshot: 'terminal screenshot text showing GP installation or verification',
+          ocr_text: 'recognized text containing the GP path, version, or error',
         },
       )
     case 'chrome_mcp':
