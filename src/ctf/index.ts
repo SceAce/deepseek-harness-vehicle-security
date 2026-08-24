@@ -12,6 +12,7 @@ import { profilePcapArtifact, triageMiscArtifact } from './misc.js'
 import { runCtfPython } from './python.js'
 import { routeCtfStart } from './router.js'
 import { buildIdaScriptPlan, queryRadare2 } from './retools.js'
+import { profileSeccomp } from './seccomp.js'
 import { createToolSetupRequest, type CtfSetupTarget } from './setup.js'
 import { httpDiff, httpRequest, probeWebBrowser, probeWebCapture } from './web.js'
 import { runPwninit } from './pwninit.js'
@@ -365,6 +366,28 @@ export function apply(ctx: Context, config: Config): void {
   }))
 
   ctx.tools.register(defineTool({
+    name: 'ctf_seccomp_profile',
+    description: 'Inspect seccomp filters installed by a local Pwn binary with seccomp-tools. Use when imports, strings, or runtime evidence suggest prctl, seccomp, sandboxing, or syscall restrictions.',
+    parameters: {
+      path: { type: 'string', required: true, description: 'Binary path relative to the active workspace' },
+      argv: { type: 'array', items: { type: 'string' }, description: 'Optional target arguments; the target is launched through seccomp-tools --sh-exec' },
+      format: { type: 'string', enum: ['disasm', 'raw', 'inspect'], description: 'seccomp-tools output format; defaults to disasm' },
+      limit: { type: 'integer', description: 'Maximum number of seccomp filters to capture, from 1 to 32; defaults to 1' },
+    },
+    output: jsonOutput,
+    timeoutMs: config.commandTimeoutMs * 2,
+    isConcurrencySafe: () => true,
+    async execute(args, exec) {
+      const file = await workspaceFile(config, exec, args.path)
+      return profileSeccomp(file, {
+        argv: args.argv,
+        format: args.format,
+        limit: args.limit,
+      }, { ...commandOptions, signal: exec.signal }) as unknown as Promise<JsonValue>
+    },
+  }))
+
+  ctx.tools.register(defineTool({
     name: 'ctf_crypto_probe',
     description: 'Probe text or a small local file for common CTF crypto encodings, entropy, hashes, and single-byte XOR candidates before writing a custom solver.',
     parameters: {
@@ -604,13 +627,14 @@ function parseSetupTarget(value: string): CtfSetupTarget {
     value === 'gdb_pwndbg'
     || value === 'ida_pro'
     || value === 'r2'
+    || value === 'seccomp_tools'
     || value === 'chrome_mcp'
     || value === 'chrome_devtools_mcp'
     || value === 'mitmproxy'
     || value === 'python_ctf_env'
     || value === 'blackarch_repo'
   ) return value
-  throw new Error('target must be gdb_pwndbg, ida_pro, r2, chrome_mcp, chrome_devtools_mcp, mitmproxy, python_ctf_env, or blackarch_repo')
+  throw new Error('target must be gdb_pwndbg, ida_pro, r2, seccomp_tools, chrome_mcp, chrome_devtools_mcp, mitmproxy, python_ctf_env, or blackarch_repo')
 }
 
 function parseHumanRequestType(value: string) {

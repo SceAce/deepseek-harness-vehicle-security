@@ -14,10 +14,11 @@ description: Tool-first pwn skill for binaries, heap, stack, ROP, and debugger-d
 5. Choose `ctf_pwn_debug_probe` for generic GDB registers, stack, breakpoints, or bounded custom commands.
 6. Choose `ctf_re_r2_query` for headless functions, xrefs, metadata, or focused disassembly.
 7. Choose `ctf_rop_search` for gadget enumeration when the mitigation and control-flow hypothesis calls for it.
-8. Use `mcp.tavily` for libc, CVE, package-version, or debugger-reference lookup when required.
-9. Use `ctf_tool_setup` with `gdb_pwndbg` when the selected local debugger backend is missing.
-10. Use `ctf_python_exec` for Python helpers; it always uses `/home/source/tools/PyVenv/CTF/bin/python`.
-11. Use `ctf_human_request` when the program needs a user-run service, device, GUI, or screenshot/log/OCR return.
+8. Choose `ctf_seccomp_profile` when imports, strings, or runtime behavior suggest `prctl`, seccomp, sandboxing, or syscall restrictions.
+9. Use `mcp.tavily` for libc, CVE, package-version, or debugger-reference lookup when required.
+10. Use `ctf_tool_setup` with `gdb_pwndbg` or `seccomp_tools` when the selected local backend is missing.
+11. Use `ctf_python_exec` for Python helpers; it always uses `/home/source/tools/PyVenv/CTF/bin/python`.
+12. Use `ctf_human_request` when the program needs a user-run service, device, GUI, or screenshot/log/OCR return.
 
 ## Tool Graph
 
@@ -26,6 +27,7 @@ binary -> ctf_artifact_profile -> ctf_pwninit -> ctf_pwn_profile
 runtime state -> mcp.gdb_pwndbg or ctf_pwn_gdb_probe or ctf_pwn_debug_probe
 headless RE -> ctf_re_r2_query
 gadget search -> ctf_rop_search
+seccomp evidence -> ctf_seccomp_profile
 libc/CVE/version context -> mcp.tavily
 missing debugger -> ctf_tool_setup(gdb_pwndbg)
 service missing -> ctf_human_request
@@ -35,6 +37,7 @@ prompt-only -> ctf_start -> ctf_tool_audit -> ctf_pwn_profile
 ## Notes
 
 - Prefer installed tooling like `checksec`, `gdb`, `ROPgadget`, `ropper`, and `pwntools`.
+- Prefer `ctf_re_r2_query`, `ctf_pwn_gdb_probe`, `ctf_rop_search`, and `ctf_seccomp_profile` over generic shell commands when their callable backend is reported ready. Use shell only after the structured tool returns an explicit failure or leaves a concrete gap.
 - `ctf_pwninit` is mandatory before other Pwn analysis actions. It auto-detects sibling `ld-*` and `libc-*` files, runs initialization when no pair exists, and uses pwninit backups before patching.
 - After `ctf_pwninit`, rerun a debugger probe only when runtime evidence is needed; use the patched binary so the observed loader and libc match the challenge files.
 - Every Python command must use `/home/source/tools/PyVenv/CTF/bin/python`.

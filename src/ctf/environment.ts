@@ -1,5 +1,5 @@
 import { constants } from 'node:fs'
-import { access } from 'node:fs/promises'
+import { access, readdir } from 'node:fs/promises'
 import path from 'node:path'
 import { findExecutable } from '../paths.js'
 
@@ -66,10 +66,37 @@ export async function ctfSearchPath(cwd = process.cwd(), selectedPythonBin?: str
   const directories = [
     selectedPythonBin,
     DEFAULT_CTF_PYTHON && path.dirname(DEFAULT_CTF_PYTHON),
+    ...(await discoverRubyGemBins()),
     ...(process.env.PATH ?? '').split(path.delimiter),
   ]
   return [...new Set(directories.filter((item): item is string => Boolean(item && item.trim())))]
     .join(path.delimiter)
+}
+
+async function discoverRubyGemBins(): Promise<string[]> {
+  const home = process.env.HOME
+  const roots = [
+    process.env.GEM_HOME,
+    home ? path.join(home, '.local', 'share', 'gem', 'ruby') : null,
+    home ? path.join(home, '.gem', 'ruby') : null,
+  ].filter((item): item is string => Boolean(item && item.trim()))
+  const directories: string[] = []
+
+  for (const root of roots) {
+    if (process.env.GEM_HOME === root) {
+      directories.push(path.join(root, 'bin'))
+      continue
+    }
+    try {
+      const entries = await readdir(root, { withFileTypes: true })
+      for (const entry of entries) {
+        if (entry.isDirectory()) directories.push(path.join(root, entry.name, 'bin'))
+      }
+    } catch {
+      // A missing Ruby user-gem directory is not a capability failure.
+    }
+  }
+  return directories
 }
 
 async function isExecutable(candidate: string): Promise<boolean> {

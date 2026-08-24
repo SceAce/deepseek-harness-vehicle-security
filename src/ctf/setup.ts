@@ -5,6 +5,7 @@ export type CtfSetupTarget =
   | 'gdb_pwndbg'
   | 'ida_pro'
   | 'r2'
+  | 'seccomp_tools'
   | 'chrome_mcp'
   | 'chrome_devtools_mcp'
   | 'mitmproxy'
@@ -131,6 +132,41 @@ function buildSetupRequest(target: CtfSetupTarget, context?: string): CtfHumanRe
           log: 'clone log, install log, and r2 version',
           screenshot: 'terminal screenshot text showing the completed install',
           ocr_text: 'recognized text with the repository path or version banner',
+        },
+      )
+    case 'seccomp_tools':
+      return requestFromOperations(
+        'start_service',
+        'Install or refresh seccomp-tools',
+        'Pwn analysis needs a direct seccomp filter dump and syscall allow/deny view.',
+        [
+          {
+            order: 1,
+            kind: 'command',
+            title: 'Install seccomp-tools as a user Ruby gem',
+            command: 'gem install --user-install --no-document seccomp-tools',
+            expectedSignal: 'Return the installation log or the exact package-manager error.',
+          },
+          {
+            order: 2,
+            kind: 'command',
+            title: 'Expose and verify the user gem executable',
+            command: `SECCOMP_TOOLS_BIN="$(ruby -e 'puts Gem.user_dir')/bin"; export PATH="$SECCOMP_TOOLS_BIN:$PATH"; command -v seccomp-tools; seccomp-tools --version`,
+            expectedSignal: 'Return the resolved seccomp-tools path and version banner.',
+          },
+          {
+            order: 3,
+            kind: 'command',
+            title: 'Verify ptrace access',
+            command: 'seccomp-tools dump --format disasm --limit 1 -- ./CHALLENGE_BINARY',
+            expectedSignal: 'Return the dump output, terminal log, screenshot text, or OCR text.',
+          },
+        ],
+        context,
+        {
+          log: 'package installation, version, and seccomp dump output',
+          screenshot: 'terminal screenshot text showing installation or ptrace status',
+          ocr_text: 'recognized text containing the version or permission error',
         },
       )
     case 'chrome_mcp':

@@ -200,6 +200,22 @@ const tools = [
     },
   },
   {
+    name: 'ctf_seccomp_profile',
+    description: 'Inspect a local Pwn binary seccomp filter with seccomp-tools and return raw rules plus syscall names.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ...workspaceProperties,
+        path: { type: 'string' },
+        argv: { type: 'array', items: { type: 'string' } },
+        format: { type: 'string', enum: ['disasm', 'raw', 'inspect'] },
+        limit: { type: 'integer', minimum: 1, maximum: 32 },
+      },
+      required: ['workspaceRoot', 'path'],
+      additionalProperties: false,
+    },
+  },
+  {
     name: 'ctf_crypto_probe',
     description: 'Probe text or a small file for common CTF crypto encodings and XOR candidates.',
     inputSchema: {
@@ -298,7 +314,7 @@ const tools = [
     inputSchema: {
       type: 'object',
       properties: {
-        target: { type: 'string', enum: ['gdb_pwndbg', 'ida_pro', 'r2', 'chrome_mcp', 'chrome_devtools_mcp', 'mitmproxy', 'python_ctf_env', 'blackarch_repo'] },
+        target: { type: 'string', enum: ['gdb_pwndbg', 'ida_pro', 'r2', 'seccomp_tools', 'chrome_mcp', 'chrome_devtools_mcp', 'mitmproxy', 'python_ctf_env', 'blackarch_repo'] },
         context: { type: 'string' },
       },
       required: ['target'],
@@ -482,6 +498,14 @@ async function callTool(name, args) {
         maxResults: args.maxResults,
       }, commandOptions)
     }
+    case 'ctf_seccomp_profile': {
+      const { profileSeccomp } = await runtime('seccomp')
+      return profileSeccomp(await workspaceFile(args), {
+        argv: args.argv,
+        format: args.format,
+        limit: args.limit,
+      }, commandOptions)
+    }
     case 'ctf_crypto_probe': {
       const { probeCryptoInput } = await runtime('crypto')
       const file = args.path ? await workspaceFile(args) : undefined
@@ -535,7 +559,7 @@ async function callTool(name, args) {
     case 'ctf_tool_setup': {
       const { createToolSetupRequest } = await runtime('setup')
       const target = requireString(args.target, 'target')
-      if (!['gdb_pwndbg', 'ida_pro', 'r2', 'chrome_mcp', 'chrome_devtools_mcp', 'mitmproxy', 'python_ctf_env', 'blackarch_repo'].includes(target)) {
+      if (!['gdb_pwndbg', 'ida_pro', 'r2', 'seccomp_tools', 'chrome_mcp', 'chrome_devtools_mcp', 'mitmproxy', 'python_ctf_env', 'blackarch_repo'].includes(target)) {
         throw new Error(`unknown setup target: ${target}`)
       }
       return createToolSetupRequest(target, typeof args.context === 'string' ? args.context : undefined)

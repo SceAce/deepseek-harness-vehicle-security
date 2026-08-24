@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { chmod, copyFile, mkdtemp, writeFile } from 'node:fs/promises'
+import { chmod, copyFile, mkdir, mkdtemp, writeFile } from 'node:fs/promises'
 import { createServer } from 'node:http'
 import { once } from 'node:events'
 import os from 'node:os'
@@ -11,7 +11,7 @@ import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
 import * as ctfPlugin from '../lib/ctf/index.js'
 import * as ctfSkillPlugin from '../lib/ctf/skills.js'
-import { DEFAULT_CTF_PYTHON, discoverCtfPython, findCtfIdaExecutable } from '../lib/ctf/environment.js'
+import { DEFAULT_CTF_PYTHON, discoverCtfPython, findCtfExecutable, findCtfIdaExecutable } from '../lib/ctf/environment.js'
 
 const config = {
   workspaceRoot: '.',
@@ -34,6 +34,7 @@ const CTF_TOOL_NAMES = [
   'ctf_re_r2_query',
   'ctf_re_ida_script',
   'ctf_rop_search',
+  'ctf_seccomp_profile',
   'ctf_crypto_probe',
   'ctf_misc_triage',
   'ctf_pcap_profile',
@@ -135,6 +136,25 @@ test('uses the fixed CTF Python interpreter without environment fallbacks', asyn
   }
 })
 
+test('discovers Ruby user-gem executables outside the inherited PATH', async t => {
+  const gemHome = await mkdtemp(path.join(os.tmpdir(), 'dsh-ctf-gem-home-'))
+  const bin = path.join(gemHome, 'bin')
+  await mkdir(bin)
+  const executable = path.join(bin, 'seccomp-tools')
+  await writeFile(executable, '#!/bin/sh\nexit 0\n')
+  await chmod(executable, 0o755)
+  t.after(() => import('node:fs/promises').then(fs => fs.rm(gemHome, { recursive: true, force: true })))
+
+  const previous = process.env.GEM_HOME
+  process.env.GEM_HOME = gemHome
+  try {
+    assert.equal(await findCtfExecutable('seccomp-tools'), executable)
+  } finally {
+    if (previous === undefined) delete process.env.GEM_HOME
+    else process.env.GEM_HOME = previous
+  }
+})
+
 test('ctf_python_exec always uses the fixed CTF interpreter', async () => {
   const workspace = await mkdtemp(path.join(os.tmpdir(), 'dsh-ctf-python-cwd-'))
   await writeFile(path.join(workspace, 'marker.txt'), 'workspace-marker\n')
@@ -228,6 +248,11 @@ test('ctf_pwn_profile returns structured binary facts for an ELF artifact', asyn
   assert.ok(!result.nextActions.some(action => action.tool === 'ctf_pwn_toolchain'))
   assert.ok(result.nextActions.some(action => action.tool === 'ctf_pwn_gdb_probe'))
   assert.ok(result.nextActions.some(action => action.tool === 'ctf_pwn_debug_probe'))
+  const hasSeccompEvidence = result.binary.imports.some(name => /^(prctl|seccomp|seccomp_init|syscall)$/.test(name))
+  assert.equal(
+    result.nextActions.some(action => action.tool === 'ctf_seccomp_profile'),
+    hasSeccompEvidence,
+  )
 })
 
 test('ctf_pwninit exposes deterministic runtime and backup operations', async t => {
@@ -392,6 +417,35 @@ test('ctf_re_r2_query keeps undefined cwd out of the real DSH output', async t =
 
   assert.equal(result.isError, false)
   assert.ok(result.content.some(block => block.type === 'text'))
+})
+
+test('ctf_seccomp_profile is callable and returns a structured result', async t => {
+  const workspace = await mkdtemp(path.join(os.tmpdir(), 'dsh-ctf-seccomp-'))
+  t.after(() => import('node:fs/promises').then(fs => fs.rm(workspace, { recursive: true, force: true })))
+  await copyFile('/bin/true', path.join(workspace, 'chall'))
+
+  const registered = []
+  ctfPlugin.apply({ tools: { register: tool => registered.push(tool) } }, {
+    ...config,
+    workspaceRoot: undefined,
+    commandTimeoutMs: 1200,
+  })
+  const seccomp = registered.find(item => item.name === 'ctf_seccomp_profile')
+  const result = await seccomp.execute(
+    { path: 'chall', format: 'disasm', limit: 1 },
+    {
+      signal: new AbortController().signal,
+      agent: { session: { header: { cwd: workspace } } },
+    },
+  )
+
+  assert.ok(['ok', 'failed', 'missing_capability'].includes(result.status))
+  assert.ok(result.dump)
+  assert.equal(result.dump.format, 'disasm')
+  assert.equal(result.dump.limit, 1)
+  assert.ok(Array.isArray(result.dump.rules))
+  assert.ok(Array.isArray(result.dump.syscalls))
+  assert.ok(Array.isArray(result.commands))
 })
 
 test('ctf_tool_audit exposes local capability and external MCP state', async () => {

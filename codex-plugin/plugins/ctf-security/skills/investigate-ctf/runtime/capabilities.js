@@ -439,6 +439,15 @@ const TOOL_BINDINGS = [
         exampleArgs: { path: 'pwn', query: 'pop|ret', maxResults: 80 },
     },
     {
+        tool: 'ctf_seccomp_profile',
+        category: 'pwn',
+        purpose: 'Dump seccomp filters and extract syscall names through the installed seccomp-tools backend.',
+        when: 'The binary imports prctl/seccomp, mentions sandboxing, or runtime behavior suggests syscall restrictions.',
+        backendCapabilities: ['pwn.seccomp_tools'],
+        fallbackTool: 'ctf_pwn_profile',
+        exampleArgs: { path: 'pwn', format: 'disasm', limit: 1 },
+    },
+    {
         tool: 'ctf_http_request',
         category: 'web',
         purpose: 'Capture one structured HTTP baseline with status, hash, preview, and exact argv.',

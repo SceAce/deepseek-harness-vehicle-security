@@ -25,11 +25,12 @@ Use the tool layer before writing a solver. When the local capability state or a
 7. If a tool returns `humanRequired`, present the request as a structured action with its exact ordered operations and wait for only `log`, `screenshot`, or `ocr_text`.
 8. If `TAVILY_API_KEY` is the only missing value, call `ctf_mcp_configure`; do not ask the user to hand-write JSON or paths.
 9. Write a new script only after the relevant local tool or configured MCP has been considered and leaves a concrete gap.
+10. When a structured local tool is reported ready, call it directly before reproducing the same operation with `bash`; use the shell only after an explicit tool failure or a clearly documented missing operation.
 
 ## Tool Map
 
 - Intake: `ctf_start`, `ctf_tool_audit`, `ctf_artifact_profile`
-- RE/Pwn: `ctf_re_profile`, `ctf_pwn_profile`, `ctf_pwninit`, `ctf_pwn_debug_probe`, `ctf_pwn_gdb_probe`, `ctf_rop_search`, `ctf_python_exec`
+- RE/Pwn: `ctf_re_profile`, `ctf_pwn_profile`, `ctf_pwninit`, `ctf_pwn_debug_probe`, `ctf_pwn_gdb_probe`, `ctf_re_r2_query`, `ctf_re_ida_script`, `ctf_rop_search`, `ctf_seccomp_profile`, `ctf_python_exec`
 - Crypto/Misc: `ctf_crypto_probe`, `ctf_misc_triage`, `ctf_pcap_profile`
 - Web: `ctf_http_request`, `ctf_http_diff`, `ctf_web_browser_probe`, `ctf_web_capture_probe`
 - MCP/configuration: `ctf_mcp_configure`, `mcp.ida_pro`, `mcp.r2`, `mcp.gdb_pwndbg`, `mcp.chrome`, `mcp.tavily`

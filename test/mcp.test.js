@@ -166,6 +166,7 @@ test('Codex CTF MCP initializes, lists tools, and probes crypto text', async t =
     'ctf_pwn_debug_probe',
     'ctf_pwn_gdb_probe',
     'ctf_rop_search',
+    'ctf_seccomp_profile',
     'ctf_crypto_probe',
     'ctf_misc_triage',
     'ctf_pcap_profile',
@@ -258,6 +259,13 @@ test('Codex CTF MCP initializes, lists tools, and probes crypto text', async t =
   })
   assert.equal(setup.result.structuredContent.status, 'human_required')
   assert.ok(setup.result.structuredContent.request.operationOrder.every(operation => operation.command || operation.instruction))
+
+  const seccompSetup = await request('tools/call', {
+    name: 'ctf_tool_setup',
+    arguments: { target: 'seccomp_tools' },
+  })
+  assert.equal(seccompSetup.result.structuredContent.target, 'seccomp_tools')
+  assert.ok(seccompSetup.result.structuredContent.request.operationOrder.every(operation => operation.command || operation.instruction))
 
   const humanRequest = await request('tools/call', {
     name: 'ctf_human_request',
